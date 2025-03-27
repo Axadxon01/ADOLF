@@ -1,2 +1,0 @@
-OPEN_AI_API = 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
-
