@@ -1,13 +1,19 @@
 import streamlit as st
-import cv2
-import numpy as np
 
 def object_interface():
-    st.subheader("Obyekt Tanish")
-    uploaded_image = st.file_uploader("Rasm yuklang", type=["jpg", "png"])
-    if uploaded_image:
-        image = cv2.imdecode(np.frombuffer(uploaded_image.read(), np.uint8), 1)
-        st.image(image, channels="BGR")
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 100, 200)
-        st.image(edges, caption="Obyekt chegaralari")
+    st.subheader("🔍 Obyekt Tanish")
+
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        st.warning("❌ OpenCV va NumPy mavjud emas.")
+        return
+
+    st.success("✅ OpenCV yuklandi!")
+    st.info("Bu yerda obyektlarni aniqlash funksiyalari amalga oshiriladi.")
+
+    # Test rasm
+    img = np.zeros((200, 200, 3), dtype=np.uint8)
+    cv2.putText(img, "Obyekt", (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+    st.image(img, caption="📸 Demo rasm", channels="BGR")
