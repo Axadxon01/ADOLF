@@ -13,3 +13,4 @@ textblob
 pydantic
 requests
 scikit-learn
+
