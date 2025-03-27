@@ -4,12 +4,18 @@ import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import pickle
-from ..database import save_user_data, get_user_data
 
-# API kalitni xavfsiz o‘qish (Streamlit secrets bilan ishlaydi)
+# 👇 MODULLARGA YO‘L QO‘SHILADI
+import sys
+import pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
+
+from database import save_user_data, get_user_data
+
+# ✅ API kalitni xavfsiz o‘qish (Streamlit secrets bilan ishlaydi)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# Modelni yuklash yoki yangidan yaratish
+# 🧠 Modelni yuklash yoki yaratish
 def load_or_create_model(user_id):
     user_data = get_user_data(user_id) or {"questions": [], "responses": []}
     if "model" not in user_data:
@@ -28,6 +34,7 @@ def load_or_create_model(user_id):
         pickle.loads(user_data["model"]["classifier"])
     )
 
+# 🔮 GPT-4 dan javob olish
 def get_gpt4_response(prompt):
     response = openai.Completion.create(
         model="gpt-4",
@@ -36,16 +43,17 @@ def get_gpt4_response(prompt):
     )
     return response.choices[0].text.strip()
 
+# 🧑‍💻 Chat interfeys
 def chat_interface():
     st.subheader("AI Chat (Self-Learning)")
     user_id = st.session_state.user_id
     user_input = st.text_input("Savolingizni kiriting:")
-    if st.button("Javob olish"):
+    if st.button("Javob olish") and user_input:
         vectorizer, classifier = load_or_create_model(user_id)
         response = get_gpt4_response(user_input)
         st.write(f"ADOLF: {response}")
         
-        # Modelni yangilash
+        # 🔁 Modelni o‘rganishga yangilash
         user_data = get_user_data(user_id)
         user_data["questions"].append(user_input)
         user_data["responses"].append(response)
