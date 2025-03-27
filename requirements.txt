@@ -1,16 +1,30 @@
+# Web & Interface
 streamlit
 fastapi
 uvicorn
+
+# OpenAI
 openai
-speechrecognition
+
+# Speech & Voice
+SpeechRecognition
 pyttsx3
+
+# Google Translate (barqaror versiyasi)
 googletrans==3.1.0a0
 google-api-python-client
+
+# Spotify API
 spotipy
+
+# PDF ishlov
 PyPDF2
-opencv-python
+
+# OpenCV (Cloud uchun "headless" versiyasi)
+opencv-python-headless==4.5.5.64
+
+# NLP & analiz
 textblob
 pydantic
 requests
 scikit-learn
-
