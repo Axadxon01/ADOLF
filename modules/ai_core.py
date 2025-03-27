@@ -1,23 +1,31 @@
+# ai_core.py
+
 import os
 import sys
+
+# 🔧 Fayl joylashgan manzilni aniqlash
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 🔙 Asosiy katalogga chiqish
+BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
+
+# 📦 Python import yo‘liga asosiy katalogni qo‘shish
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 import streamlit as st
 import openai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import pickle
 
-# ✅ DINAMIK YO‘L SOZLASH – asosiy papkani import yo‘liga qo‘sh
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
-
-# ✅ Endi to‘g‘ri ishlaydi:
+# ✅ Endi bu ishlaydi!
 from database import save_user_data, get_user_data
 
-# 🔐 OpenAI API kalitini olish
+# 🔐 OpenAI API kaliti (Streamlit secrets orqali)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# 🧠 Modelni yaratish yoki yuklash
+# 🧠 Foydalanuvchiga xos modelni yaratish/yuklash
 def load_or_create_model(user_id):
     user_data = get_user_data(user_id) or {"questions": [], "responses": []}
 
@@ -41,7 +49,7 @@ def load_or_create_model(user_id):
         pickle.loads(user_data["model"]["classifier"])
     )
 
-# 🤖 GPT-4’dan javob olish
+# 🤖 GPT-4 orqali javob olish
 def get_gpt4_response(prompt):
     try:
         response = openai.ChatCompletion.create(
@@ -56,7 +64,7 @@ def get_gpt4_response(prompt):
     except Exception as e:
         return f"❌ Xatolik: {str(e)}"
 
-# 💬 Interfeys
+# 🗣️ Streamlit orqali foydalanuvchi bilan suhbat
 def chat_interface():
     st.subheader("🤖 AI Chat (Self-Learning)")
 
@@ -68,7 +76,7 @@ def chat_interface():
         response = get_gpt4_response(user_input)
         st.write(f"ADOLF: {response}")
 
-        # 🔁 Modelni yangilash
+        # 🔄 Modelni yangilash
         user_data = get_user_data(user_id)
         user_data["questions"].append(user_input)
         user_data["responses"].append(response)
