@@ -1,1 +1,32 @@
+# 🔐 Maxfiy fayllar
 config.py
+.env
+secrets.toml
+
+# 🗄 Ma’lumotlar bazasi
+*.db
+*.sqlite3
+
+# 📦 Model va obyektlar
+*.pkl
+*.joblib
+
+# 🧠 Cache va kompilyatsiya qilingan fayllar
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 💻 IDE va OS fayllari
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 📂 Test fayllari va vaqtinchaliklar
+*.log
+*.tmp
+*.bak
+*.swp
+
+# 🔄 Streamlit generated
+.streamlit/
