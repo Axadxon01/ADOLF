@@ -1,24 +1,23 @@
 import os
 import sys
-
-# 📁 Fayl joylashuvini aniqlash va asosiy papkaga yo‘l berish
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
-sys.path.insert(0, parent_dir)
-
 import streamlit as st
 import openai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import pickle
 
-# 📦 Baza funksiyalarini import qilish
+# ✅ DINAMIK YO‘L SOZLASH – asosiy papkani import yo‘liga qo‘sh
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+# ✅ Endi to‘g‘ri ishlaydi:
 from database import save_user_data, get_user_data
 
-# 🔐 OpenAI API kalitini o‘qish (Streamlit Secrets orqali)
+# 🔐 OpenAI API kalitini olish
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# 🧠 Modelni yuklash yoki yangisini yaratish
+# 🧠 Modelni yaratish yoki yuklash
 def load_or_create_model(user_id):
     user_data = get_user_data(user_id) or {"questions": [], "responses": []}
 
@@ -42,7 +41,7 @@ def load_or_create_model(user_id):
         pickle.loads(user_data["model"]["classifier"])
     )
 
-# 🤖 GPT-4 orqali javob olish
+# 🤖 GPT-4’dan javob olish
 def get_gpt4_response(prompt):
     try:
         response = openai.ChatCompletion.create(
@@ -57,7 +56,7 @@ def get_gpt4_response(prompt):
     except Exception as e:
         return f"❌ Xatolik: {str(e)}"
 
-# 💬 Streamlit interfeysda chatbot
+# 💬 Interfeys
 def chat_interface():
     st.subheader("🤖 AI Chat (Self-Learning)")
 
@@ -69,7 +68,7 @@ def chat_interface():
         response = get_gpt4_response(user_input)
         st.write(f"ADOLF: {response}")
 
-        # 🔁 Modelni yangi savol-javob bilan yangilash
+        # 🔁 Modelni yangilash
         user_data = get_user_data(user_id)
         user_data["questions"].append(user_input)
         user_data["responses"].append(response)
