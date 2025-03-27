@@ -10,7 +10,6 @@ spotipy
 PyPDF2
 opencv-python
 textblob
-sqlite3
 pydantic
 requests
 scikit-learn
