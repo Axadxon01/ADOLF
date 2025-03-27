@@ -1,27 +1,22 @@
 import streamlit as st
-from googleapiclient.discovery import build
-from config import YOUTUBE_API_KEY
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
-from config import SPOTIFY_CLIENT_ID, SPOTIFY_SECRET
+import urllib.parse
 
 def media_interface():
-    st.subheader("Media Boshqaruvi")
+    st.subheader("🎵 Media Qidiruv (API’larsiz)")
+
     option = st.selectbox("Platforma tanlang", ["YouTube", "Spotify"])
-    
-    if option == "YouTube":
-        youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
-        search_query = st.text_input("YouTube’da qidirish:")
-        if st.button("Qidirish"):
-            request = youtube.search().list(q=search_query, part="snippet", maxResults=5)
-            response = request.execute()
-            for item in response["items"]:
-                st.write(item["snippet"]["title"])
-    
-    elif option == "Spotify":
-        sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=SPOTIFY_CLIENT_ID, client_secret=SPOTIFY_SECRET))
-        search_query = st.text_input("Spotify’da qidirish:")
-        if st.button("Qidirish"):
-            results = sp.search(q=search_query, limit=5)
-            for track in results["tracks"]["items"]:
-                st.write(track["name"])
+    query = st.text_input("Qidiruv so‘rovi:")
+
+    if query and st.button("Qidirish"):
+        encoded_query = urllib.parse.quote_plus(query)
+
+        if option == "YouTube":
+            url = f"https://www.youtube.com/results?search_query={encoded_query}"
+            st.markdown(f"[🔎 YouTube’da natijalarni ko‘rish]({url})", unsafe_allow_html=True)
+            st.components.v1.iframe(url, height=400)
+
+        elif option == "Spotify":
+            url = f"https://open.spotify.com/search/{encoded_query}"
+            st.markdown(f"[🔎 Spotify’da natijalarni ko‘rish]({url})", unsafe_allow_html=True)
+            st.components.v1.iframe(url, height=400)
+
