@@ -1,0 +1,16 @@
+streamlit
+fastapi
+uvicorn
+openai
+speechrecognition
+pyttsx3
+googletrans==3.1.0a0
+google-api-python-client
+spotipy
+PyPDF2
+opencv-python
+textblob
+sqlite3
+pydantic
+requests
+scikit-learn
