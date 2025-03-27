@@ -1,13 +1,24 @@
 import streamlit as st
-from modules import ai_core, voice, routine, media, dev_tools, knowledge, monitoring, object_intel, analysis
+import requests
+import time
+
+# 🔧 AI moduli endi root papkada
+import ai_core
+
+# 📦 Qolgan modullar modules/ ichida qolmoqda
+from modules import voice, routine, media, dev_tools, knowledge, monitoring, object_intel, analysis
+
+# 🔐 Xavfsizlik va ma’lumotlar
 from security import generate_otp, check_security, face_id_check
 from database import save_user_data, get_user_data
-import requests
 
+# 🛠 Streamlit sozlamalari
 st.set_page_config(page_title="ADOLF 5.0", page_icon="🤖")
 
+# 🌐 Server uchun baza URL (FastAPI)
 BASE_URL = "http://localhost:8000"
 
+# 🚀 Ilovani ishga tushurish
 def main():
     st.title("ADOLF 5.0 - Aqlli Raqamli Hamroh")
     st.write("Sizning kundalik, professional va favqulodda ehtiyojlaringiz uchun yordamchi.")
@@ -21,13 +32,16 @@ def main():
     else:
         show_dashboard()
 
+# 🔐 Kirish interfeysi
 def authenticate_user():
     st.subheader("Kirish")
     auth_method = st.selectbox("Autentifikatsiya usuli", ["OTP", "Face ID"])
+
     if auth_method == "OTP":
         if st.button("OTP generatsiya qilish"):
             response = requests.get(f"{BASE_URL}/generate_otp/{st.session_state.user_id}")
             st.write(f"OTP: {response.json()['otp']}")
+        
         otp_input = st.text_input("OTP kodini kiriting", type="password")
         if st.button("Tasdiqlash"):
             if check_security(otp_input):
@@ -35,6 +49,7 @@ def authenticate_user():
                 st.success("Muvaffaqiyatli kirish!")
             else:
                 st.error("Noto‘g‘ri kod.")
+
     elif auth_method == "Face ID":
         if st.button("Face ID tekshiruvi"):
             if face_id_check():
@@ -43,6 +58,7 @@ def authenticate_user():
             else:
                 st.error("Yuz aniqlanmadi.")
 
+# 📊 Boshqaruv paneli
 def show_dashboard():
     menu = st.sidebar.selectbox("Menyu", [
         "AI Chat", "Ovozli Muloqot", "Kundalik Reja", "Media", "Dev Tools",
@@ -59,6 +75,6 @@ def show_dashboard():
     elif menu == "Obyekt Tanish": object_intel.object_interface()
     elif menu == "Tahlil": analysis.analysis_interface()
 
+# ⚙️ Ilovani ishga tushirish
 if __name__ == "__main__":
-    import time
     main()
