@@ -4,7 +4,7 @@ import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import pickle
-from database import save_user_data, get_user_data
+from ..database import save_user_data, get_user_data
 
 # API kalitni xavfsiz o‘qish (Streamlit secrets bilan ishlaydi)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
