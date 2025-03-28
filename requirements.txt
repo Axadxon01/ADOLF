@@ -1,23 +1,24 @@
 # --- CORE ---
-streamlit
-fastapi
-uvicorn
+streamlit==1.8.0
+fastapi==0.75.0
+uvicorn==0.17.6
 
 # --- AI & Voice ---
-openai
-SpeechRecognition
-pyttsx3
-googletrans==3.1.0a0
-textblob
+openai==0.11.4
+SpeechRecognition==3.8.1
+pyttsx3==2.90
+googletrans==4.0.0-rc1
+textblob==0.15.3
 
 # --- MEDIA ---
-spotipy
-google-api-python-client
-PyPDF2
+spotipy==2.18.0
+google-api-python-client==2.31.0
+PyPDF2==1.26.0
 
 # --- CV & DATA ---
 opencv-python-headless==4.5.5.64
 numpy==1.24.4
-scikit-learn
-pydantic
-requests
+scikit-learn==0.24.2
+pydantic==1.8.2
+requests==2.26.0
+
