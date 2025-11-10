@@ -17,8 +17,11 @@ PyPDF2==1.26.0
 
 # --- CV & DATA ---
 opencv-python-headless==4.5.5.64
-numpy==1.24.4
-scikit-learn==0.24.2
+numpy==1.26.4
+scikit-learn>=1.2.2
 pydantic==1.8.2
 requests==2.26.0
 
+# Build helpers (recommended)
+setuptools
+wheel
