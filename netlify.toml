@@ -1,0 +1,3 @@
+# Netlify build sozlamalari web/ papkasida (web/netlify.toml).
+[build]
+  base = "web"

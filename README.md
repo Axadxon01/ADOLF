@@ -13,7 +13,7 @@ Loyihada **ikkita versiya** bor:
 
 ## Netlify'ga deploy (web versiya)
 
-1. Netlify'da shu repozitoriyani ulang. `netlify.toml` `web/` papkasini o'zi topadi (build: `npm run build`, publish: `public`).
+1. Netlify'da shu repozitoriyani ulang. **Base directory: `web`** (ildizdagi `netlify.toml` buni o'zi belgilaydi; build: `npm run build`, publish: `public`). Qo'lda deploy: `cd web && npx netlify deploy --prod`.
 2. **Site configuration → Environment variables** bo'limida (scope: *Functions*) quyidagilarni kiriting:
 
 | O'zgaruvchi | Majburiy | Tavsif |
