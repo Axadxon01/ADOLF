@@ -101,6 +101,30 @@ def translate(text: str, target: str) -> str:
     )
 
 
+LANG_NAMES = {"uz": "o'zbek", "en": "ingliz", "ru": "rus"}
+
+
+def summarize(text: str) -> str:
+    return complete(
+        [
+            {"role": "system", "content": "Matnning qisqa mazmunini o'zbek tilida 5-7 gapda yoz."},
+            {"role": "user", "content": text[:6000]},
+        ],
+        max_tokens=600,
+    )
+
+
+def speak(text: str) -> bytes:
+    """Matnni ovozga aylantiradi (mp3). Ovoz OPENAI_TTS_VOICE bilan o'zgartiriladi."""
+    resp = _client().audio.speech.create(
+        model=os.environ.get("OPENAI_TTS_MODEL", "tts-1"),
+        voice=os.environ.get("OPENAI_TTS_VOICE", "onyx"),
+        input=text[:1500],
+        response_format="mp3",
+    )
+    return resp.read()
+
+
 def sentiment(text: str) -> dict:
     raw = complete(
         [

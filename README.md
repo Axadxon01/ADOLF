@@ -1,4 +1,4 @@
-# ADOLF 5.1 — Aqlli Raqamli Hamroh
+# ADOLF 5.2 — Aqlli Raqamli Hamroh
 
 AI chat, ovozli muloqot, kundalik reja, media qidiruv, PDF hujjatlar (tarjima/qisqacha mazmun), kod yordamchi, rasmdagi obyektlarni tanish va matn kayfiyati tahlili.
 
@@ -7,7 +7,8 @@ Loyihada **ikkita versiya** bor:
 | Versiya | Papka | Qayerda ishlaydi |
 |---|---|---|
 | **Web (Netlify)** | `web/` | Netlify: statik sayt + serverless funksiyalar |
-| **Python (Streamlit + FastAPI)** | ildiz papka | Lokal kompyuter yoki Python hosting (Render va h.k.) |
+| **Python (FastAPI + shu HUD interfeys)** | ildiz papka | Render yoki lokal kompyuter |
+| Klassik Streamlit (`main.py`) | ildiz papka | Faqat lokal, ixtiyoriy |
 
 > Netlify Streamlit/FastAPI serverlarini ishga tushira olmaydi, shuning uchun web versiya alohida yozilgan.
 
@@ -35,16 +36,31 @@ Lokal sinash: `cd web && npm install && npx netlify dev` (o'zgaruvchilarni `web/
 - Kod hech qayerda ishga tushirilmaydi (eski `exec` olib tashlangan).
 - Vazifalar va suhbat tarixi faqat foydalanuvchi brauzerida (localStorage) saqlanadi.
 
-## Python versiya (lokal)
+## Render / lokal (FastAPI + HUD interfeys)
+
+Interfeys `web/public` papkasida, `server.py` uni va API'ni birga xizmat qiladi.
 
 ```bash
 pip install -r requirements.txt
 export ADOLF_ACCESS_CODE="sizning-kodingiz"
 export ADOLF_SECRET="$(openssl rand -hex 32)"
 export OPENAI_API_KEY="sk-..."
-streamlit run main.py          # interfeys
-python server.py               # (ixtiyoriy) REST API: /api/login, /api/chat
-pytest                         # testlar
+uvicorn server:app --port 8000      # http://localhost:8000
+```
+
+**Render sozlamalari:** Build `pip install -r requirements.txt`, Start `uvicorn server:app --host 0.0.0.0 --port $PORT`. Muhit o'zgaruvchilari: `ADOLF_ACCESS_CODE`, `ADOLF_SECRET`, `OPENAI_API_KEY` (ixtiyoriy: `OPENAI_MODEL`, `OPENAI_TTS_VOICE` — standart `onyx`).
+
+### Ovozli boshqaruv
+- Yadroni bosing va gapiring. «Doimiy suhbat» — javobdan keyin o'zi yana tinglaydi. «ADOLF deb chaqirish» — doim tinglaydi va «ADOLF, soat nechchi?» deganda javob beradi.
+- AI'siz ishlaydigan buyruqlar: «soat nechchi», «bugun qaysi kun», «vazifa qo'sh: …», «vazifalarim», «YouTube …», «musiqa qo'y …», «suhbatni tozala».
+- Ovoz OpenAI TTS orqali chiqadi; u ishlamasa brauzer ovoziga o'tadi. Ovozni tanish Chrome/Edge'da ishlaydi.
+
+## Klassik Streamlit versiya (ixtiyoriy)
+
+```bash
+pip install -r requirements-dev.txt
+streamlit run main.py
+pytest
 ```
 
 ## Eski versiyadan nimalar tuzatildi

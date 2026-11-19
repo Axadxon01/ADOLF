@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 
 import pytest
 
@@ -97,7 +96,7 @@ def test_server_flow(monkeypatch):
     assert c.post("/api/login", json={"code": "noto'g'ri"}).status_code == 401
     token = c.post("/api/login", json={"code": "sir-kod-123"}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
-    assert c.post("/api/chat", json={"message": "salom"}, headers=h).json() == {"response": "AI javobi"}
+    assert c.post("/api/chat", json={"message": "salom"}, headers=h).json() == {"reply": "AI javobi", "response": "AI javobi"}
     assert c.post("/api/chat", json={"message": ""}, headers=h).status_code == 422
     assert c.post("/api/chat", json={"message": "x" * 5000}, headers=h).status_code == 422
     assert c.post("/api/chat", json={"message": "a"}, headers={"Authorization": "Bearer yolgon"}).status_code == 401
@@ -124,3 +123,85 @@ def test_streamlit_app_login_gate():
     for page in at.sidebar.selectbox[0].options:
         at.sidebar.selectbox[0].select(page).run()
         assert not at.exception, page
+
+
+def _client(monkeypatch):
+    from fastapi.testclient import TestClient
+    import ai_core, server
+    server._hits.clear()
+    monkeypatch.setattr(ai_core, "complete", lambda m, max_tokens=600: "AI javobi")
+    c = TestClient(server.app)
+    token = c.post("/api/login", json={"code": "sir-kod-123"}).json()["token"]
+    return c, {"Authorization": f"Bearer {token}"}
+
+
+def test_chat_with_messages_list(monkeypatch):
+    c, h = _client(monkeypatch)
+    ok = c.post("/api/chat", json={"messages": [{"role": "user", "content": "salom"}]}, headers=h)
+    assert ok.json()["reply"] == "AI javobi"
+    bad = c.post("/api/chat", json={"messages": [{"role": "assistant", "content": "x"}]}, headers=h)
+    assert bad.status_code == 400
+    assert c.post("/api/chat", json={"messages": [{"role": "system", "content": "x"}]}, headers=h).status_code == 422
+    assert c.post("/api/chat", json={}, headers=h).status_code == 422
+
+
+def test_tools_endpoint(monkeypatch):
+    import ai_core
+    c, h = _client(monkeypatch)
+    assert c.post("/api/tools", json={"action": "translate", "text": "hi", "target": "uz"}, headers=h).json() == {"result": "AI javobi"}
+    assert c.post("/api/tools", json={"action": "translate", "text": "hi", "target": "xx"}, headers=h).status_code == 400
+    assert c.post("/api/tools", json={"action": "rm -rf", "text": "x"}, headers=h).status_code == 422
+    assert c.post("/api/tools", json={"action": "code", "text": "sort"}, headers=h).json() == {"result": "AI javobi"}
+    assert c.post("/api/tools", json={"action": "summarize", "text": "uzun matn"}, headers=h).status_code == 200
+    assert c.post("/api/tools", json={"action": "code", "text": "x"}).status_code == 401
+
+
+def test_vision_validation(monkeypatch):
+    import ai_core
+    c, h = _client(monkeypatch)
+    monkeypatch.setattr(ai_core, "describe_image", lambda raw, mime: f"{mime}:{len(raw)}")
+    png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    assert c.post("/api/vision", json={"image": png}, headers=h).json()["result"].startswith("image/png:")
+    assert c.post("/api/vision", json={"image": "http://evil/x.png"}, headers=h).status_code == 400
+    assert c.post("/api/vision", json={"image": "data:image/svg+xml;base64,PHN2Zz4="}, headers=h).status_code == 400
+
+
+def test_speak_returns_audio(monkeypatch):
+    import ai_core
+    c, h = _client(monkeypatch)
+    monkeypatch.setattr(ai_core, "speak", lambda text: b"ID3-fake-mp3")
+    r = c.post("/api/speak", json={"text": "salom"}, headers=h)
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg" and r.content == b"ID3-fake-mp3"
+    assert c.post("/api/speak", json={"text": ""}, headers=h).status_code == 422
+    assert c.post("/api/speak", json={"text": "x" * 2000}, headers=h).status_code == 422
+
+
+def test_ai_error_is_explained(monkeypatch):
+    import ai_core, openai, httpx
+    c, h = _client(monkeypatch)
+    def boom(m, max_tokens=600):
+        raise openai.RateLimitError("quota", response=httpx.Response(429, request=httpx.Request("POST", "http://x")), body=None)
+    monkeypatch.setattr(ai_core, "complete", boom)
+    r = c.post("/api/chat", json={"messages": [{"role": "user", "content": "a"}]}, headers=h)
+    assert r.status_code == 502 and "balansi" in r.json()["detail"]
+
+
+def test_rate_limit(monkeypatch):
+    c, h = _client(monkeypatch)
+    codes = [c.post("/api/chat", json={"message": "a"}, headers=h).status_code for _ in range(32)]
+    assert codes[:30] == [200] * 30 and codes[-1] == 429
+
+
+def test_static_ui_and_security_headers():
+    from fastapi.testclient import TestClient
+    import server
+    c = TestClient(server.app)
+    r = c.get("/")
+    assert r.status_code == 200 and "ADOLF" in r.text
+    assert "script-src 'self'" in r.headers["content-security-policy"]
+    assert r.headers["x-frame-options"] == "DENY"
+    for path in ("/app.js", "/hud.js", "/styles.css", "/favicon.svg"):
+        assert c.get(path).status_code == 200, path
+    assert c.get("/api/chat").status_code in (404, 405)
+    assert c.get("/../server.py").status_code in (404, 400)
+    assert "ai_core" not in c.get("/server.py").text  # manba kod ochiq emas

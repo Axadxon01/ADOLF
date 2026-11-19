@@ -1,8 +1,5 @@
-streamlit>=1.40,<2
+# Server (Render): FastAPI + HUD interfeysi
 fastapi>=0.115
 uvicorn>=0.30
 openai>=1.50,<3
-pypdf>=5.0
 pydantic>=2.7
-httpx>=0.27
-pytest>=8

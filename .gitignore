@@ -34,7 +34,6 @@ Thumbs.db
 # Netlify / Node
 .netlify
 node_modules/
-web/public/vendor/
 
 # env
 web/.env

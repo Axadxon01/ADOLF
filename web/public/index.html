@@ -4,137 +4,163 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>ADOLF — Aqlli raqamli hamroh</title>
-  <meta name="description" content="ADOLF: AI chat, ovozli muloqot, kundalik reja, hujjatlar, obyekt tanish va tahlil — bitta joyda.">
-  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="ADOLF: ovozli sun'iy intellekt yordamchi — suhbat, reja, hujjatlar, obyekt tanish va tahlil.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#020b14">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
+<body data-state="idle">
+  <div class="bg" aria-hidden="true"></div>
+  <div class="scan" aria-hidden="true"></div>
+
   <!-- Kirish -->
   <main id="login-view" class="login" hidden>
-    <form id="login-form" class="card login-card" autocomplete="off">
-      <div class="brand brand-lg"><span class="logo" aria-hidden="true">A</span><span>ADOLF</span></div>
-      <p class="muted">Aqlli raqamli hamroh. Davom etish uchun kirish kodini kiriting.</p>
-      <label for="code">Kirish kodi</label>
-      <input id="code" type="password" required maxlength="200" autocomplete="current-password">
+    <form id="login-form" class="frame login-card" autocomplete="off">
+      <div class="orb-mini"><canvas id="orb-login" aria-hidden="true"></canvas></div>
+      <h1 class="brand-lg">ADOLF</h1>
+      <p class="label">Autentifikatsiya talab qilinadi</p>
+      <label for="code" class="sr-only">Kirish kodi</label>
+      <input id="code" type="password" required maxlength="200" autocomplete="current-password" placeholder="KIRISH KODI">
       <p id="login-error" class="error" role="alert" hidden></p>
-      <button class="btn primary" type="submit">Kirish</button>
+      <button class="btn primary" type="submit">Tizimga kirish</button>
     </form>
   </main>
 
+  <!-- Yuklanish animatsiyasi -->
+  <div id="boot" class="boot" hidden aria-hidden="true"><pre id="boot-log"></pre></div>
+
   <!-- Ilova -->
   <div id="app-view" hidden>
-    <header class="topbar">
-      <div class="brand"><span class="logo" aria-hidden="true">A</span><span>ADOLF</span></div>
-      <button id="logout" class="btn ghost" type="button">Chiqish</button>
+    <header class="hud-top">
+      <div class="brand"><span class="dot" aria-hidden="true"></span>ADOLF <span class="ver">v5.2</span></div>
+      <div class="clock" aria-label="Vaqt"><span id="clock-time">--:--:--</span><span id="clock-date" class="label"></span></div>
+      <button id="logout" class="btn ghost small" type="button">Chiqish</button>
     </header>
-    <nav class="tabs" role="tablist" aria-label="Bo'limlar">
-      <button role="tab" data-tab="chat" aria-selected="true">AI Chat</button>
-      <button role="tab" data-tab="voice" aria-selected="false">Ovoz</button>
-      <button role="tab" data-tab="routine" aria-selected="false">Reja</button>
-      <button role="tab" data-tab="media" aria-selected="false">Media</button>
-      <button role="tab" data-tab="docs" aria-selected="false">Hujjatlar</button>
-      <button role="tab" data-tab="code" aria-selected="false">Kod</button>
-      <button role="tab" data-tab="vision" aria-selected="false">Obyekt</button>
-      <button role="tab" data-tab="analysis" aria-selected="false">Tahlil</button>
-    </nav>
 
-    <main class="content">
-      <!-- AI Chat -->
-      <section id="tab-chat" class="panel" role="tabpanel">
-        <div id="messages" class="messages" aria-live="polite"></div>
-        <form id="chat-form" class="composer">
-          <textarea id="chat-input" rows="1" maxlength="4000" placeholder="Savolingizni yozing…" aria-label="Savol"></textarea>
-          <button class="btn primary" type="submit" id="chat-send">Yuborish</button>
-        </form>
-        <button id="chat-clear" class="btn ghost small" type="button">Suhbatni tozalash</button>
-      </section>
+    <div class="grid">
+      <!-- Chap panel -->
+      <aside class="frame panel left" aria-label="Tizim holati">
+        <h2 class="label">Tizim holati</h2>
+        <ul class="status">
+          <li><span>Tarmoq</span><b id="st-net">—</b></li>
+          <li><span>Mikrofon</span><b id="st-mic">—</b></li>
+          <li><span>Sun'iy intellekt</span><b id="st-ai">KUTILMOQDA</b></li>
+          <li><span>Ovoz</span><b id="st-tts">—</b></li>
+        </ul>
+        <h2 class="label">Vazifalar</h2>
+        <ul id="hud-tasks" class="hud-tasks"></ul>
+      </aside>
 
-      <!-- Ovoz -->
-      <section id="tab-voice" class="panel" role="tabpanel" hidden>
-        <h2>Ovozli muloqot</h2>
-        <p id="voice-unsupported" class="notice" hidden>Brauzeringiz ovozni tanishni qo'llamaydi. Chrome yoki Edge'dan foydalaning.</p>
-        <button id="mic" class="mic" type="button" aria-pressed="false" aria-label="Mikrofonni yoqish">
-          <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
-        </button>
-        <p id="voice-status" class="muted center">Bosing va gapiring (o'zbek tili)</p>
-        <label class="check"><input id="speak" type="checkbox" checked> Javobni ovozda o'qish</label>
-        <div id="voice-log" class="messages compact" aria-live="polite"></div>
-      </section>
-
-      <!-- Reja -->
-      <section id="tab-routine" class="panel" role="tabpanel" hidden>
-        <h2>Kundalik reja</h2>
-        <form id="task-form" class="composer">
-          <input id="task-input" type="text" maxlength="200" placeholder="Vazifa qo'shing…" aria-label="Vazifa" required>
-          <button class="btn primary" type="submit">Qo'shish</button>
-        </form>
-        <ul id="tasks" class="tasks"></ul>
-        <p class="muted small">Vazifalar faqat shu qurilmadagi brauzeringizda saqlanadi.</p>
-      </section>
-
-      <!-- Media -->
-      <section id="tab-media" class="panel" role="tabpanel" hidden>
-        <h2>Media qidiruv</h2>
-        <form id="media-form" class="composer">
-          <input id="media-input" type="text" maxlength="200" placeholder="Qo'shiq yoki video nomi…" aria-label="Qidiruv" required>
-        </form>
-        <div class="row">
-          <button class="btn primary" type="button" data-media="youtube">YouTube'da ochish</button>
-          <button class="btn" type="button" data-media="spotify">Spotify'da ochish</button>
+      <!-- Markaz -->
+      <section class="center" aria-label="Asosiy boshqaruv">
+        <div class="orb-wrap">
+          <canvas id="orb" aria-hidden="true"></canvas>
+          <button id="orb-btn" class="orb-btn" type="button" aria-label="Gapirish uchun bosing"></button>
         </div>
-      </section>
+        <p id="state-label" class="state" role="status">KUTISH REJIMI</p>
+        <p id="heard" class="heard" aria-live="polite"></p>
 
-      <!-- Hujjatlar -->
-      <section id="tab-docs" class="panel" role="tabpanel" hidden>
-        <h2>Hujjatlar bilan ishlash</h2>
-        <label for="pdf-input">PDF fayl</label>
-        <input id="pdf-input" type="file" accept="application/pdf">
-        <p id="pdf-status" class="muted small"></p>
-        <textarea id="pdf-text" rows="8" maxlength="6000" placeholder="PDF matni shu yerda ko'rinadi (tahrirlashingiz mumkin)"></textarea>
-        <div class="row">
-          <select id="doc-lang" aria-label="Tarjima tili">
-            <option value="uz">O'zbekcha</option>
-            <option value="en">Inglizcha</option>
-            <option value="ru">Ruscha</option>
-          </select>
-          <button id="doc-translate" class="btn primary" type="button">Tarjima qilish</button>
-          <button id="doc-summary" class="btn" type="button">Qisqacha mazmuni</button>
+        <form id="cmd-form" class="cmd">
+          <label for="cmd-input" class="sr-only">Buyruq</label>
+          <span class="prompt" aria-hidden="true">›</span>
+          <input id="cmd-input" type="text" maxlength="4000" autocomplete="off" placeholder="Buyruq yoki savol yozing…">
+          <button class="btn primary" type="submit" id="cmd-send">Yuborish</button>
+        </form>
+
+        <div class="toggles">
+          <label class="switch"><input id="opt-voice" type="checkbox" checked><span>Ovozli javob</span></label>
+          <label class="switch"><input id="opt-convo" type="checkbox"><span>Doimiy suhbat</span></label>
+          <label class="switch"><input id="opt-wake" type="checkbox"><span>«ADOLF» deb chaqirish</span></label>
         </div>
-        <pre id="doc-result" class="result" hidden></pre>
+        <p id="voice-unsupported" class="notice" hidden>Brauzeringiz ovozni tanishni qo'llamaydi — Chrome yoki Edge'dan foydalaning. Yozma buyruqlar ishlaydi.</p>
+
+        <nav class="dock" aria-label="Modullar">
+          <button class="btn" data-open="dlg-routine" type="button">Reja</button>
+          <button class="btn" data-open="dlg-media" type="button">Media</button>
+          <button class="btn" data-open="dlg-docs" type="button">Hujjat</button>
+          <button class="btn" data-open="dlg-code" type="button">Kod</button>
+          <button class="btn" data-open="dlg-vision" type="button">Obyekt</button>
+          <button class="btn" data-open="dlg-analysis" type="button">Tahlil</button>
+        </nav>
       </section>
 
-      <!-- Kod -->
-      <section id="tab-code" class="panel" role="tabpanel" hidden>
-        <h2>Kod yordamchi</h2>
-        <p class="muted small">Kod hech qayerda ishga tushirilmaydi — faqat yozishda yordam beradi.</p>
-        <textarea id="code-input" rows="5" maxlength="4000" placeholder="Nima yozish kerak? Masalan: Python'da ro'yxatni saralash"></textarea>
-        <button id="code-run" class="btn primary" type="button">Yordam so'rash</button>
-        <pre id="code-result" class="result" hidden></pre>
-      </section>
-
-      <!-- Obyekt -->
-      <section id="tab-vision" class="panel" role="tabpanel" hidden>
-        <h2>Obyekt tanish</h2>
-        <label for="img-input">Rasm yuklang yoki suratga oling</label>
-        <input id="img-input" type="file" accept="image/png,image/jpeg,image/webp" capture="environment">
-        <img id="img-preview" class="preview" alt="Tanlangan rasm" hidden>
-        <pre id="vision-result" class="result" hidden></pre>
-      </section>
-
-      <!-- Tahlil -->
-      <section id="tab-analysis" class="panel" role="tabpanel" hidden>
-        <h2>Matn kayfiyati tahlili</h2>
-        <textarea id="analysis-input" rows="5" maxlength="4000" placeholder="Tahlil qilinadigan matn…"></textarea>
-        <button id="analysis-run" class="btn primary" type="button">Tahlil qilish</button>
-        <div id="analysis-result" class="result" hidden></div>
-      </section>
-    </main>
+      <!-- O'ng panel -->
+      <aside class="frame panel right" aria-label="Jurnal">
+        <div class="row-between">
+          <h2 class="label">Jurnal</h2>
+          <button id="log-clear" class="btn ghost small" type="button">Tozalash</button>
+        </div>
+        <div id="log" class="log" aria-live="polite"></div>
+      </aside>
+    </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   </div>
 
+  <!-- Modullar -->
+  <dialog id="dlg-routine" class="frame dlg" aria-labelledby="t-routine">
+    <form method="dialog" class="dlg-head"><h2 id="t-routine">Kundalik reja</h2><button class="btn ghost small" aria-label="Yopish">✕</button></form>
+    <form id="task-form" class="row">
+      <input id="task-input" type="text" maxlength="200" placeholder="Vazifa qo'shing…" aria-label="Vazifa" required>
+      <button class="btn primary" type="submit">Qo'shish</button>
+    </form>
+    <ul id="tasks" class="tasks"></ul>
+    <p class="muted small">Vazifalar faqat shu qurilmadagi brauzeringizda saqlanadi. Ovozda ham ayting: «vazifa qo'sh: sut olish».</p>
+  </dialog>
+
+  <dialog id="dlg-media" class="frame dlg" aria-labelledby="t-media">
+    <form method="dialog" class="dlg-head"><h2 id="t-media">Media qidiruv</h2><button class="btn ghost small" aria-label="Yopish">✕</button></form>
+    <input id="media-input" type="text" maxlength="200" placeholder="Qo'shiq yoki video nomi…" aria-label="Qidiruv">
+    <div class="row">
+      <button class="btn primary" type="button" data-media="youtube">YouTube'da ochish</button>
+      <button class="btn" type="button" data-media="spotify">Spotify'da ochish</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-docs" class="frame dlg" aria-labelledby="t-docs">
+    <form method="dialog" class="dlg-head"><h2 id="t-docs">Hujjatlar</h2><button class="btn ghost small" aria-label="Yopish">✕</button></form>
+    <label for="pdf-input" class="label">PDF fayl</label>
+    <input id="pdf-input" type="file" accept="application/pdf">
+    <p id="pdf-status" class="muted small"></p>
+    <textarea id="pdf-text" rows="7" maxlength="6000" placeholder="PDF matni shu yerda ko'rinadi (tahrirlashingiz mumkin)"></textarea>
+    <div class="row">
+      <select id="doc-lang" aria-label="Tarjima tili">
+        <option value="uz">O'zbekcha</option>
+        <option value="en">Inglizcha</option>
+        <option value="ru">Ruscha</option>
+      </select>
+      <button id="doc-translate" class="btn primary" type="button">Tarjima</button>
+      <button id="doc-summary" class="btn" type="button">Qisqacha mazmuni</button>
+    </div>
+    <pre id="doc-result" class="result" hidden></pre>
+  </dialog>
+
+  <dialog id="dlg-code" class="frame dlg" aria-labelledby="t-code">
+    <form method="dialog" class="dlg-head"><h2 id="t-code">Kod yordamchi</h2><button class="btn ghost small" aria-label="Yopish">✕</button></form>
+    <p class="muted small">Kod hech qayerda ishga tushirilmaydi — faqat yozishda yordam beradi.</p>
+    <textarea id="code-input" rows="5" maxlength="4000" placeholder="Nima yozish kerak? Masalan: Python'da ro'yxatni saralash"></textarea>
+    <button id="code-run" class="btn primary" type="button">Yordam so'rash</button>
+    <pre id="code-result" class="result" hidden></pre>
+  </dialog>
+
+  <dialog id="dlg-vision" class="frame dlg" aria-labelledby="t-vision">
+    <form method="dialog" class="dlg-head"><h2 id="t-vision">Obyekt tanish</h2><button class="btn ghost small" aria-label="Yopish">✕</button></form>
+    <label for="img-input" class="label">Rasm yuklang yoki suratga oling</label>
+    <input id="img-input" type="file" accept="image/png,image/jpeg,image/webp" capture="environment">
+    <img id="img-preview" class="preview" alt="Tanlangan rasm" hidden>
+    <pre id="vision-result" class="result" hidden></pre>
+  </dialog>
+
+  <dialog id="dlg-analysis" class="frame dlg" aria-labelledby="t-analysis">
+    <form method="dialog" class="dlg-head"><h2 id="t-analysis">Matn kayfiyati tahlili</h2><button class="btn ghost small" aria-label="Yopish">✕</button></form>
+    <textarea id="analysis-input" rows="5" maxlength="4000" placeholder="Tahlil qilinadigan matn…"></textarea>
+    <button id="analysis-run" class="btn primary" type="button">Tahlil qilish</button>
+    <div id="analysis-result" class="result" hidden></div>
+  </dialog>
+
   <noscript><p class="notice">ADOLF ishlashi uchun JavaScript kerak.</p></noscript>
   <script src="/vendor/pdf.min.js" defer></script>
+  <script src="/hud.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>
