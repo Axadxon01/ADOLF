@@ -30,3 +30,11 @@ Thumbs.db
 
 # 🔄 Streamlit generated
 .streamlit/
+
+# Netlify / Node
+.netlify
+node_modules/
+web/public/vendor/
+
+# env
+web/.env

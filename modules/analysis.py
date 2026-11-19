@@ -1,10 +1,17 @@
 import streamlit as st
-from textblob import TextBlob
+
+import ai_core
+
 
 def analysis_interface():
-    st.subheader("Tahlil va Etika")
-    text = st.text_area("Matn kiriting:")
-    if st.button("Tahlil qilish"):
-        blob = TextBlob(text)
-        sentiment = blob.sentiment.polarity
-        st.write(f"Sentiment: {'Pozitiv' if sentiment > 0 else 'Negativ' if sentiment < 0 else 'Neytral'}")
+    st.subheader("Matn kayfiyati tahlili")
+    text = st.text_area("Matn kiriting:", max_chars=ai_core.MAX_INPUT_CHARS)
+    if st.button("Tahlil qilish") and text.strip():
+        try:
+            res = ai_core.sentiment(text)
+            st.write(f"Kayfiyat: **{res.get('label', '?')}** (ball: {res.get('score', 0)})")
+            st.caption(res.get("izoh", ""))
+        except ai_core.AIConfigError as exc:
+            st.error(f"❌ {exc}")
+        except Exception:
+            st.error("❌ AI xizmati vaqtincha ishlamayapti.")

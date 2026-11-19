@@ -1,0 +1,16 @@
+{
+  "name": "adolf-web",
+  "version": "5.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ADOLF — Netlify uchun web versiya (statik sayt + serverless funksiyalar)",
+  "scripts": {
+    "build": "node scripts/copy-vendor.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@netlify/functions": "^2.8.2",
+    "pdfjs-dist": "3.11.174"
+  },
+  "engines": { "node": ">=20" }
+}

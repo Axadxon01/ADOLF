@@ -1,11 +1,16 @@
 import streamlit as st
 
+import ai_core
+
+
 def dev_interface():
-    st.subheader("Dasturchi Vositalari")
-    code_input = st.text_area("Kod kiriting (Python):")
-    if st.button("Ishlatish"):
+    st.subheader("Kod Yordamchi")
+    st.caption("Kod xavfsizlik uchun serverda ishga tushirilmaydi — faqat yozishda yordam beradi.")
+    task = st.text_area("Nima yozish kerak?", max_chars=ai_core.MAX_INPUT_CHARS)
+    if st.button("Yordam so'rash") and task.strip():
         try:
-            exec(code_input)
-            st.write("Kod muvaffaqiyatli ishlatildi!")
-        except Exception as e:
-            st.write(f"Xatolik: {e}")
+            st.markdown(ai_core.code_help(task))
+        except ai_core.AIConfigError as exc:
+            st.error(f"❌ {exc}")
+        except Exception:
+            st.error("❌ AI xizmati vaqtincha ishlamayapti.")

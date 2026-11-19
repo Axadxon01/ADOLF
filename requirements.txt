@@ -1,27 +1,8 @@
-# --- CORE ---
-streamlit==1.8.0
-fastapi==0.75.0
-uvicorn==0.17.6
-
-# --- AI & Voice ---
-openai==0.11.4
-SpeechRecognition==3.8.1
-pyttsx3==2.90
-googletrans==4.0.0-rc1
-textblob==0.15.3
-
-# --- MEDIA ---
-spotipy==2.18.0
-google-api-python-client==2.31.0
-PyPDF2==1.26.0
-
-# --- CV & DATA ---
-opencv-python-headless==4.5.5.64
-numpy==1.26.4
-scikit-learn>=1.2.2
-pydantic==1.8.2
-requests==2.26.0
-
-# Build helpers (recommended)
-setuptools
-wheel
+streamlit>=1.40,<2
+fastapi>=0.115
+uvicorn>=0.30
+openai>=1.50,<3
+pypdf>=5.0
+pydantic>=2.7
+httpx>=0.27
+pytest>=8

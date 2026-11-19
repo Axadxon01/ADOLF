@@ -1,22 +1,18 @@
-import streamlit as st
 import urllib.parse
 
+import streamlit as st
+
+
 def media_interface():
-    st.subheader("🎵 Media Qidiruv (API’larsiz)")
-
+    st.subheader("🎵 Media Qidiruv")
     option = st.selectbox("Platforma tanlang", ["YouTube", "Spotify"])
-    query = st.text_input("Qidiruv so‘rovi:")
-
-    if query and st.button("Qidirish"):
-        encoded_query = urllib.parse.quote_plus(query)
-
-        if option == "YouTube":
-            url = f"https://www.youtube.com/results?search_query={encoded_query}"
-            st.markdown(f"[🔎 YouTube’da natijalarni ko‘rish]({url})", unsafe_allow_html=True)
-            st.components.v1.iframe(url, height=400)
-
-        elif option == "Spotify":
-            url = f"https://open.spotify.com/search/{encoded_query}"
-            st.markdown(f"[🔎 Spotify’da natijalarni ko‘rish]({url})", unsafe_allow_html=True)
-            st.components.v1.iframe(url, height=400)
-
+    query = st.text_input("Qidiruv so'rovi:", max_chars=200)
+    if query.strip():
+        q = urllib.parse.quote_plus(query.strip())
+        url = (
+            f"https://www.youtube.com/results?search_query={q}"
+            if option == "YouTube"
+            else f"https://open.spotify.com/search/{q}"
+        )
+        # Ikkala sayt ham iframe ichida ochilishni bloklaydi, shuning uchun havola beriladi.
+        st.link_button(f"🔎 {option}'da natijalarni ochish", url)
