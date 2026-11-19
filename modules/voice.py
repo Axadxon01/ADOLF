@@ -1,6 +1,11 @@
+import logging
+
 import streamlit as st
 
 import ai_core
+
+
+logger = logging.getLogger("adolf")
 
 
 def voice_interface():
@@ -15,5 +20,6 @@ def voice_interface():
             st.write(f"ADOLF: {ai_core.chat(st.session_state.user_id, text)}")
     except ai_core.AIConfigError as exc:
         st.error(f"❌ {exc}")
-    except Exception:
-        st.error("❌ Ovozni qayta ishlab bo'lmadi.")
+    except Exception as exc:
+        logger.exception("AI xatosi")
+        st.error(f"❌ {ai_core.user_message(exc)}")

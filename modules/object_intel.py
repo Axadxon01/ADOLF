@@ -1,6 +1,11 @@
+import logging
+
 import streamlit as st
 
 import ai_core
+
+
+logger = logging.getLogger("adolf")
 
 
 def object_interface():
@@ -12,5 +17,6 @@ def object_interface():
             st.write(ai_core.describe_image(shot.getvalue(), shot.type or "image/jpeg"))
         except ai_core.AIConfigError as exc:
             st.error(f"❌ {exc}")
-        except Exception:
-            st.error("❌ Rasmni tahlil qilib bo'lmadi.")
+        except Exception as exc:
+            logger.exception("AI xatosi")
+            st.error(f"❌ {ai_core.user_message(exc)}")

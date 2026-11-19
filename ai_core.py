@@ -23,6 +23,26 @@ class AIConfigError(RuntimeError):
     """API kaliti sozlanmagan."""
 
 
+def user_message(exc: Exception) -> str:
+    """Foydalanuvchiga tushunarli xato matni (kalit yoki boshqa sirlar chiqmaydi)."""
+    if isinstance(exc, AIConfigError):
+        return str(exc)
+    try:
+        import openai
+
+        if isinstance(exc, openai.AuthenticationError):
+            return "OpenAI kaliti noto'g'ri yoki bekor qilingan."
+        if isinstance(exc, openai.RateLimitError):
+            return "OpenAI limiti yoki balansi tugagan (billing/quota). Hisobingizni tekshiring."
+        if isinstance(exc, (openai.NotFoundError, openai.PermissionDeniedError)):
+            return f"'{_model()}' modeli mavjud emas yoki kalitingizda unga ruxsat yo'q (OPENAI_MODEL ni o'zgartiring)."
+        if isinstance(exc, openai.APIConnectionError):
+            return "OpenAI'ga ulanib bo'lmadi. Keyinroq urinib ko'ring."
+    except ImportError:
+        pass
+    return "AI xizmati vaqtincha ishlamayapti. Keyinroq urinib ko'ring."
+
+
 def _model() -> str:
     return os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 

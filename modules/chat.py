@@ -1,7 +1,12 @@
+import logging
+
 import streamlit as st
 
 import ai_core
 from database import get_user_data
+
+
+logger = logging.getLogger("adolf")
 
 
 def chat_interface():
@@ -16,8 +21,9 @@ def chat_interface():
             st.chat_message("assistant").write(ai_core.chat(user_id, prompt))
         except ai_core.AIConfigError as exc:
             st.error(f"❌ {exc}")
-        except Exception:
-            st.error("❌ AI xizmati vaqtincha ishlamayapti. Keyinroq urinib ko'ring.")
+        except Exception as exc:
+            logger.exception("AI xatosi")
+            st.error(f"❌ {ai_core.user_message(exc)}")
     if st.sidebar.button("Suhbatni tozalash"):
         ai_core.clear_history(user_id)
         st.rerun()

@@ -50,9 +50,9 @@ async def chat(body: ChatRequest, user: str = Depends(current_user)):
         return {"response": ai_core.chat(user, body.message)}
     except ai_core.AIConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception:
+    except Exception as exc:
         logger.exception("AI xatosi")
-        raise HTTPException(status_code=502, detail="AI xizmati vaqtincha ishlamayapti")
+        raise HTTPException(status_code=502, detail=ai_core.user_message(exc))
 
 
 if __name__ == "__main__":

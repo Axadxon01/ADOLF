@@ -1,7 +1,12 @@
+import logging
+
 import streamlit as st
 from pypdf import PdfReader
 
 import ai_core
+
+logger = logging.getLogger("adolf")
+
 
 MAX_PAGES = 30
 
@@ -27,5 +32,6 @@ def knowledge_interface():
             st.write(ai_core.get_ai_response("Quyidagi matnning qisqa mazmunini yoz:\n\n" + text[:6000]))
     except ai_core.AIConfigError as exc:
         st.error(f"❌ {exc}")
-    except Exception:
-        st.error("❌ AI xizmati vaqtincha ishlamayapti.")
+    except Exception as exc:
+        logger.exception("AI xatosi")
+        st.error(f"❌ {ai_core.user_message(exc)}")
