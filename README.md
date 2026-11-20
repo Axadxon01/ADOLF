@@ -1,4 +1,4 @@
-# ADOLF 5.2 — Aqlli Raqamli Hamroh
+# ADOLF 5.3 — Aqlli Raqamli Hamroh
 
 AI chat, ovozli muloqot, kundalik reja, media qidiruv, PDF hujjatlar (tarjima/qisqacha mazmun), kod yordamchi, rasmdagi obyektlarni tanish va matn kayfiyati tahlili.
 
@@ -7,10 +7,10 @@ Loyihada **ikkita versiya** bor:
 | Versiya | Papka | Qayerda ishlaydi |
 |---|---|---|
 | **Web (Netlify)** | `web/` | Netlify: statik sayt + serverless funksiyalar |
-| **Python (FastAPI + shu HUD interfeys)** | ildiz papka | Render yoki lokal kompyuter |
+| **Python (FastAPI + JARVIS uslubidagi HUD)** | ildiz papka | Render yoki lokal kompyuter — barcha yangi imkoniyatlar shu yerda |
 | Klassik Streamlit (`main.py`) | ildiz papka | Faqat lokal, ixtiyoriy |
 
-> Netlify Streamlit/FastAPI serverlarini ishga tushira olmaydi, shuning uchun web versiya alohida yozilgan.
+> Netlify Streamlit/FastAPI serverlarini ishga tushira olmaydi, shuning uchun web versiya alohida yozilgan. Ob-havo, agent rejimi va taymerlar (5.3) hozircha faqat FastAPI versiyasida.
 
 ## Netlify'ga deploy (web versiya)
 
@@ -52,8 +52,26 @@ uvicorn server:app --port 8000      # http://localhost:8000
 
 ### Ovozli boshqaruv
 - Yadroni bosing va gapiring. «Doimiy suhbat» — javobdan keyin o'zi yana tinglaydi. «ADOLF deb chaqirish» — doim tinglaydi va «ADOLF, soat nechchi?» deganda javob beradi.
-- AI'siz ishlaydigan buyruqlar: «soat nechchi», «bugun qaysi kun», «vazifa qo'sh: …», «vazifalarim», «YouTube …», «musiqa qo'y …», «suhbatni tozala».
 - Ovoz OpenAI TTS orqali chiqadi; u ishlamasa brauzer ovoziga o'tadi. Ovozni tanish Chrome/Edge'da ishlaydi.
+
+### JARVIS imkoniyatlari (5.3)
+**AI'siz, brauzerning o'zida ishlaydi** (OpenAI hisobi bo'lmasa ham):
+
+| Buyruq | Natija |
+|---|---|
+| «5 daqiqaga taymer», «bir yarim soatga taymer», «10 daqiqadan keyin choy damlashni eslat» | Taymer HUD'da sanaydi, tugaganda signal + ovozli e'lon. Sahifa qayta yuklansa ham saqlanadi |
+| «taymerlar qancha qoldi», «taymerlarni bekor qil», «to'xta» | Boshqaruv; «to'xta» signalni o'chiradi |
+| «ob-havo», «Samarqandda ob-havo qanday», «shahrim Buxoro» | Open-Meteo (kalitsiz) orqali joriy ob-havo; chap paneldagi karta |
+| «brifing» | Salomlashish + soat + ob-havo + vazifalar + taymerlar. Kirganda ham avtomatik aytiladi |
+| «mening ismim Axad», «eslab qol: …», «nimalarni eslab qolding», «xotirani tozala» | Ism va faktlar brauzerda saqlanadi va AI'ga kontekst sifatida yuboriladi |
+| «12*12 necha», «hisobla (3+4)*5», «5 ga 7 ni qo'sh» | Xavfsiz kalkulyator (`eval` yo'q) |
+| «diagnostika», «yordam» | Tizim holati hisoboti, buyruqlar ro'yxati |
+
+**AI agent rejimi** (OpenAI hisobi kerak): model `get_weather`, `get_time`, `calculate`, `set_timer`, `add_task`, `open_media` asboblarini o'zi chaqiradi — masalan «Toshkentda soat nechada va yomg'ir yog'adimi, shunga qarab 20 daqiqaga taymer qo'y». Taymer, vazifa va havolalar interfeysga qaytib, o'sha zahoti bajariladi. Asbob qo'llamaydigan model bo'lsa, oddiy suhbatga o'tadi.
+
+**Interfeys:** ob-havo va taymerlar paneli, server javob vaqti (ping), batareya va aloqa turi, WebAudio ovoz effektlari (sozlamadan o'chiriladi), javobning harfma-harf yozilishi (`prefers-reduced-motion` hurmat qilinadi).
+
+> Taymerlar brauzer sahifasi ochiq bo'lganda ishlaydi (orqa fondagi varaq brauzer tomonidan sekinlashtirilishi mumkin — signal bir necha soniya kechikishi mumkin). `tzdata` paketi vaqt zonalari uchun kerak (requirements.txt'da bor).
 
 ## Klassik Streamlit versiya (ixtiyoriy)
 

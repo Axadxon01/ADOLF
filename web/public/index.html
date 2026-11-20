@@ -33,23 +33,43 @@
   <!-- Ilova -->
   <div id="app-view" hidden>
     <header class="hud-top">
-      <div class="brand"><span class="dot" aria-hidden="true"></span>ADOLF <span class="ver">v5.2</span></div>
+      <div class="brand"><span class="dot" aria-hidden="true"></span>ADOLF <span class="ver">v5.3</span></div>
       <div class="clock" aria-label="Vaqt"><span id="clock-time">--:--:--</span><span id="clock-date" class="label"></span></div>
       <button id="logout" class="btn ghost small" type="button">Chiqish</button>
     </header>
 
+    <div id="alarm" class="alarm" role="alert" hidden>
+      <span id="alarm-text"></span>
+      <button id="alarm-stop" class="btn small primary" type="button">To'xtatish</button>
+    </div>
+
     <div class="grid">
       <!-- Chap panel -->
       <aside class="frame panel left" aria-label="Tizim holati">
+        <h2 class="label">Ob-havo</h2>
+        <div id="wx" class="wx" aria-live="polite">
+          <div class="wx-main"><b id="wx-temp">--</b><span id="wx-desc">Yuklanmoqda…</span></div>
+          <p id="wx-city" class="label"></p>
+          <ul class="wx-meta">
+            <li><span>His etilishi</span><b id="wx-feels">—</b></li>
+            <li><span>Namlik</span><b id="wx-hum">—</b></li>
+            <li><span>Shamol</span><b id="wx-wind">—</b></li>
+          </ul>
+        </div>
+        <h2 class="label">Taymerlar</h2>
+        <ul id="hud-timers" class="hud-timers"></ul>
+        <h2 class="label">Vazifalar</h2>
+        <ul id="hud-tasks" class="hud-tasks"></ul>
         <h2 class="label">Tizim holati</h2>
         <ul class="status">
           <li><span>Tarmoq</span><b id="st-net">—</b></li>
+          <li><span>Server</span><b id="st-ping">—</b></li>
           <li><span>Mikrofon</span><b id="st-mic">—</b></li>
           <li><span>Sun'iy intellekt</span><b id="st-ai">KUTILMOQDA</b></li>
           <li><span>Ovoz</span><b id="st-tts">—</b></li>
+          <li><span>Aloqa</span><b id="st-conn">—</b></li>
+          <li><span>Batareya</span><b id="st-bat">—</b></li>
         </ul>
-        <h2 class="label">Vazifalar</h2>
-        <ul id="hud-tasks" class="hud-tasks"></ul>
       </aside>
 
       <!-- Markaz -->
@@ -72,6 +92,7 @@
           <label class="switch"><input id="opt-voice" type="checkbox" checked><span>Ovozli javob</span></label>
           <label class="switch"><input id="opt-convo" type="checkbox"><span>Doimiy suhbat</span></label>
           <label class="switch"><input id="opt-wake" type="checkbox"><span>«ADOLF» deb chaqirish</span></label>
+          <label class="switch"><input id="opt-sfx" type="checkbox" checked><span>Ovoz effektlari</span></label>
         </div>
         <p id="voice-unsupported" class="notice" hidden>Brauzeringiz ovozni tanishni qo'llamaydi — Chrome yoki Edge'dan foydalaning. Yozma buyruqlar ishlaydi.</p>
 
@@ -161,6 +182,7 @@
   <noscript><p class="notice">ADOLF ishlashi uchun JavaScript kerak.</p></noscript>
   <script src="/vendor/pdf.min.js" defer></script>
   <script src="/hud.js" defer></script>
+  <script src="/jarvis.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

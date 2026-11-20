@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 import ai_core
 import security
+import tools
 
 logger = logging.getLogger("adolf.server")
 app = FastAPI(title="ADOLF", docs_url=None, redoc_url=None, openapi_url=None)
@@ -96,6 +97,8 @@ class Msg(BaseModel):
 class ChatRequest(BaseModel):
     message: Optional[str] = Field(default=None, min_length=1, max_length=ai_core.MAX_INPUT_CHARS)
     messages: Optional[List[Msg]] = Field(default=None, max_length=20)
+    memory: Optional[List[str]] = Field(default=None, max_length=20)
+    tz: Optional[str] = Field(default=None, max_length=64)
 
 
 class ToolRequest(BaseModel):
@@ -135,17 +138,17 @@ def chat(body: ChatRequest, user: str = Depends(current_user)):
     if body.messages:
         if body.messages[-1].role != "user" or not body.messages[-1].content.strip():
             raise HTTPException(status_code=400, detail="Oxirgi xabar foydalanuvchidan bo'lishi kerak.")
-        messages = [{"role": "system", "content": ai_core.SYSTEM_PROMPT}] + [m.model_dump() for m in body.messages]
-        reply = ai_call(ai_core.complete, messages, 700)
-    elif body.message:
+        memory = [m[:200] for m in (body.memory or [])]
+        result = ai_call(ai_core.agent_chat, [m.model_dump() for m in body.messages], memory, body.tz or "")
+        return {"reply": result["reply"], "actions": result["actions"], "response": result["reply"]}
+    if body.message:
         reply = ai_call(ai_core.chat, user, body.message)
-    else:
-        raise HTTPException(status_code=422, detail="message yoki messages kerak.")
-    return {"reply": reply, "response": reply}
+        return {"reply": reply, "actions": [], "response": reply}
+    raise HTTPException(status_code=422, detail="message yoki messages kerak.")
 
 
 @app.post("/api/tools", dependencies=[Depends(rate_limit())])
-def tools(body: ToolRequest, user: str = Depends(current_user)):
+def run_tool(body: ToolRequest, user: str = Depends(current_user)):
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Matn bo'sh.")
@@ -174,6 +177,14 @@ def vision(body: VisionRequest, user: str = Depends(current_user)):
     except (binascii.Error, ValueError):
         raise HTTPException(status_code=400, detail="Rasm buzilgan.")
     return {"result": ai_call(ai_core.describe_image, raw, m.group(1))}
+
+
+@app.get("/api/weather", dependencies=[Depends(rate_limit(20))])
+def weather(city: str = "", user: str = Depends(current_user)):
+    try:
+        return tools.get_weather(city)
+    except tools.ToolError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @app.post("/api/speak", dependencies=[Depends(rate_limit())])

@@ -14,6 +14,9 @@ const session = {
 };
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sfx, parseDuration, speakDuration, clock: fmtCountdown, calc, typeInto } = window.Jarvis;
+const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
+const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 
 let toastTimer;
 function toast(text) {
@@ -40,12 +43,10 @@ function setState(s) {
 // ---------- API ----------
 async function api(path, body) {
   let res;
+  const headers = { authorization: `Bearer ${session.get()}` };
+  if (body !== undefined) headers["content-type"] = "application/json";
   try {
-    res = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${session.get()}` },
-      body: JSON.stringify(body),
-    });
+    res = await fetch(path, { method: body === undefined ? "GET" : "POST", headers, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
     throw new Error("Tarmoq xatosi. Internetni tekshiring.");
   }
@@ -70,6 +71,7 @@ function showView() {
   $("app-view").hidden = !authed;
 }
 function logout() {
+  sfx.stopAlarm();
   stopListening(true);
   stopSpeaking();
   session.clear();
@@ -82,6 +84,7 @@ async function bootSequence() {
   pre.textContent = "";
   boot.classList.remove("fade");
   boot.hidden = false;
+  sfx.play("boot");
   for (const line of ["› yadro yuklanmoqda ........ OK", "› xavfsizlik moduli ......... OK", "› ovoz tizimi ............... OK", "› ADOLF tayyor."]) {
     pre.textContent += line + "\n";
     await sleep(320);
@@ -142,10 +145,54 @@ function refreshNet() { setStatus("st-net", navigator.onLine ? "ONLINE" : "OFFLI
 window.addEventListener("online", refreshNet);
 window.addEventListener("offline", refreshNet);
 
+async function pingServer() {
+  const t0 = performance.now();
+  try {
+    const r = await fetch("/health", { cache: "no-store" });
+    if (!r.ok) throw new Error("health");
+    const ms = Math.round(performance.now() - t0);
+    setStatus("st-ping", `${ms} MS`, ms > 1500 ? "warn" : "");
+  } catch {
+    setStatus("st-ping", "UZILGAN", "bad");
+  }
+}
+function refreshConn() {
+  const c = navigator.connection;
+  if (!c) { $("st-conn").closest("li").hidden = true; return; }
+  const text = [(c.effectiveType || "").toUpperCase(), c.downlink ? `${c.downlink} Mbit/s` : ""].filter(Boolean).join(" · ");
+  setStatus("st-conn", text || "—", c.saveData ? "warn" : "");
+}
+async function initBattery() {
+  const li = $("st-bat").closest("li");
+  if (!navigator.getBattery) { li.hidden = true; return; }
+  try {
+    const b = await navigator.getBattery();
+    const upd = () => setStatus("st-bat", `${Math.round(b.level * 100)}%${b.charging ? " ⚡" : ""}`, b.level < 0.2 && !b.charging ? "bad" : "");
+    upd();
+    b.addEventListener("levelchange", upd);
+    b.addEventListener("chargingchange", upd);
+  } catch { li.hidden = true; }
+}
+
 // ---------- Jurnal ----------
 const HISTORY_KEY = "adolf_chat";
 const MAX_HISTORY = 20;
+const SAFE_URL = /^https:\/\/(www\.youtube\.com|open\.spotify\.com)\//;
+function addLogLinks(div, link) {
+  const links = (Array.isArray(link) ? link : link ? [link] : []).filter((l) => l && SAFE_URL.test(l.url));
+  if (!links.length) return;
+  div.append(document.createElement("br"));
+  for (const l of links) {
+    const a = document.createElement("a");
+    a.href = l.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = l.label || "Ochish";
+    div.append(a);
+  }
+}
 function addLog(role, text, link) {
+  finishTyping();
   const log = $("log");
   const empty = log.querySelector(".empty");
   if (empty) empty.remove();
@@ -158,18 +205,35 @@ function addLog(role, text, link) {
   txt.className = "txt";
   txt.textContent = text; // textContent — XSS'dan himoya
   div.append(who, txt);
-  if (link) {
-    const a = document.createElement("a");
-    a.href = link.url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.textContent = link.label;
-    div.append(document.createElement("br"), a);
-  }
+  addLogLinks(div, link);
   log.appendChild(div);
   while (log.children.length > 80) log.firstElementChild.remove();
   log.scrollTop = log.scrollHeight;
   return div;
+}
+let activeTyper = null;
+function finishTyping() {
+  const f = activeTyper;
+  activeTyper = null;
+  if (f) f();
+}
+/** Bot javobini harfma-harf yozadi (kamaytirilgan harakat sozlamasida darhol). */
+function typeLog(entry, text) {
+  finishTyping();
+  const log = $("log");
+  entry.classList.add("typing");
+  let fin = null;
+  fin = typeInto(entry.querySelector(".txt"), text, {
+    onTick: () => { log.scrollTop = log.scrollHeight; },
+    onDone: () => { entry.classList.remove("typing"); if (activeTyper === fin) activeTyper = null; },
+  });
+  if (entry.classList.contains("typing")) activeTyper = fin;
+}
+async function botSay(text, links) {
+  const entry = addLog("bot", "", links);
+  typeLog(entry, text);
+  sfx.play("done");
+  await speak(text);
 }
 function renderLogEmpty() {
   const log = $("log");
@@ -254,28 +318,323 @@ function stopSpeaking() {
   if (state === "speaking") setState("idle");
 }
 
+// ---------- Xotira (ism, shahar, faktlar) ----------
+const MEM_KEY = "adolf_memory";
+const CITY_KEY = "adolf_city";
+const DEFAULT_CITY = "Toshkent";
+const MAX_FACTS = 15;
+const memory = {
+  get() {
+    const m = store.get(MEM_KEY, {});
+    return {
+      name: typeof m.name === "string" ? m.name.slice(0, 40) : "",
+      facts: Array.isArray(m.facts) ? m.facts.filter((f) => typeof f === "string").slice(0, MAX_FACTS) : [],
+    };
+  },
+  save(m) { store.set(MEM_KEY, m); },
+  /** AI'ga yuboriladigan qisqa ro'yxat (server ≤ 20 ta qabul qiladi). */
+  forServer() {
+    const m = this.get();
+    const out = [];
+    if (m.name) out.push(`Foydalanuvchining ismi: ${m.name}`);
+    const city = store.get(CITY_KEY, null);
+    if (typeof city === "string" && city) out.push(`Foydalanuvchining shahri: ${city}`);
+    for (const f of m.facts) out.push(f.slice(0, 200));
+    return out.slice(0, 20);
+  },
+};
+const titleCase = (s) => s.replace(/(^|[\s-])(\S)/g, (_, a, b) => a + b.toUpperCase());
+function currentCity() {
+  const c = store.get(CITY_KEY, DEFAULT_CITY);
+  return typeof c === "string" && c ? c : DEFAULT_CITY;
+}
+
+// ---------- Taymerlar ----------
+const TIMERS_KEY = "adolf_timers";
+const MAX_TIMERS = 10;
+let timers = store.get(TIMERS_KEY, []).filter((t) => t && typeof t.id === "string" && typeof t.label === "string" && Number.isFinite(t.endAt));
+const timerEls = new Map();
+const saveTimers = () => store.set(TIMERS_KEY, timers);
+function addTimer(seconds, label) {
+  if (timers.length >= MAX_TIMERS) return false;
+  timers.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), label: String(label || "Taymer").slice(0, 80), endAt: Date.now() + seconds * 1000 });
+  saveTimers();
+  renderTimers();
+  return true;
+}
+function removeTimer(id) {
+  timers = timers.filter((t) => t.id !== id);
+  saveTimers();
+  renderTimers();
+}
+function renderTimers() {
+  const ul = $("hud-timers");
+  ul.replaceChildren();
+  timerEls.clear();
+  if (!timers.length) {
+    const li = document.createElement("li");
+    li.className = "none";
+    li.textContent = "Faol taymer yo'q";
+    ul.appendChild(li);
+    return;
+  }
+  for (const t of timers) {
+    const li = document.createElement("li");
+    const lbl = document.createElement("span");
+    lbl.className = "lbl";
+    lbl.textContent = t.label;
+    const left = document.createElement("b");
+    left.className = "left";
+    left.textContent = fmtCountdown((t.endAt - Date.now()) / 1000);
+    const del = document.createElement("button");
+    del.className = "del";
+    del.type = "button";
+    del.textContent = "✕";
+    del.setAttribute("aria-label", `Taymerni bekor qilish: ${t.label}`);
+    del.addEventListener("click", () => removeTimer(t.id));
+    li.append(lbl, left, del);
+    ul.appendChild(li);
+    timerEls.set(t.id, left);
+  }
+}
+function ringAlarm(msg) {
+  $("alarm-text").textContent = msg;
+  $("alarm").hidden = false;
+  sfx.alarm(() => { $("alarm").hidden = true; });
+}
+$("alarm-stop").addEventListener("click", () => sfx.stopAlarm());
+function announce(msg) {
+  if (state === "listening" && $("opt-wake").checked) stopListening();
+  if (state === "idle") speak(msg).then(resumeListening);
+}
+function fireTimer(t) {
+  removeTimer(t.id);
+  const msg = t.label && t.label !== "Taymer" ? `Taymer tugadi: ${t.label}.` : "Taymer tugadi.";
+  if (Date.now() - t.endAt > 90000) { // sahifa yopiq bo'lgan paytda tugagan
+    addLog("bot", `${msg} (siz yo'q paytda tugagan)`);
+    toast(msg);
+    return;
+  }
+  addLog("bot", msg);
+  ringAlarm(msg);
+  setTimeout(() => announce(msg), 1200);
+}
+function tickTimers() {
+  if (!session.get()) return;
+  const now = Date.now();
+  for (const t of timers.slice()) {
+    if (t.endAt <= now) { fireTimer(t); continue; }
+    const el = timerEls.get(t.id);
+    if (el) el.textContent = fmtCountdown((t.endAt - now) / 1000);
+  }
+}
+setInterval(tickTimers, 1000);
+function timersSummary() {
+  const now = Date.now();
+  return timers.map((t) => `${t.label === "Taymer" ? "taymer" : t.label} — ${speakDuration((t.endAt - now) / 1000)} qoldi`).join("; ");
+}
+
+// ---------- Ob-havo ----------
+const WX_TTL = 9 * 60 * 1000;
+const wxCache = new Map();
+const deg = (n) => `${n < 0 ? "minus " + Math.abs(n) : n} daraja`;
+function fetchWeather(city) {
+  const key = norm(city);
+  const hit = wxCache.get(key);
+  if (hit && Date.now() - hit.at < WX_TTL) return hit.promise;
+  const promise = api(`/api/weather?city=${encodeURIComponent(city)}`);
+  const entry = { at: Date.now(), promise };
+  wxCache.set(key, entry);
+  promise.catch(() => { if (wxCache.get(key) === entry) wxCache.delete(key); });
+  return promise;
+}
+function weatherSentence(w, label) {
+  return `${label}: hozir ${deg(w.temp)}, ${w.description}. His etilishi ${deg(w.feels)}, namlik ${w.humidity} foiz, shamol ${w.wind} metr soniyada.`;
+}
+async function refreshWeather() {
+  const city = currentCity();
+  const box = $("wx");
+  try {
+    const w = await fetchWeather(city);
+    $("wx-temp").textContent = `${w.temp}°`;
+    $("wx-desc").textContent = w.description;
+    $("wx-feels").textContent = `${w.feels}°`;
+    $("wx-hum").textContent = `${w.humidity}%`;
+    $("wx-wind").textContent = `${w.wind} m/s`;
+    box.classList.remove("off");
+  } catch {
+    $("wx-temp").textContent = "--";
+    $("wx-desc").textContent = "Ma'lumot yo'q";
+    for (const id of ["wx-feels", "wx-hum", "wx-wind"]) $(id).textContent = "—";
+    box.classList.add("off");
+  }
+  $("wx-city").textContent = titleCase(city);
+}
+const KNOWN_CITIES = ["toshkent", "samarqand", "buxoro", "xiva", "andijon", "farg'ona", "namangan", "qarshi", "termiz", "urganch", "nukus", "jizzax", "guliston", "navoiy", "qo'qon", "marg'ilon", "chirchiq", "angren", "olmaliq", "bekobod", "denov", "shahrisabz", "zarafshon", "london", "moskva", "parij", "berlin", "istanbul", "dubay", "pekin", "tokio", "seul", "rim", "madrid", "vashington", "nyu-york", "bishkek", "dushanbe", "astana", "olmaota"];
+const LOCATIVE = /(dagi|da|dan|ning|ga|uchun|ni)$/;
+/** «Samarqandda ob-havo qanday» → «samarqand». Shahar topilmasa bo'sh qator. */
+function cityFromWords(t) {
+  for (const w of t.split(" ")) {
+    const known = KNOWN_CITIES.find((c) => w.startsWith(c) && w.length - c.length <= 5);
+    if (known) return known;
+  }
+  for (const w of t.split(" ")) {
+    const m = w.match(/^([a-z'-]{3,})(dagi|da|ning)$/);
+    if (m && !/(havo|ob|bugun|hozir|tashqari)$/.test(m[1])) return m[1];
+  }
+  return "";
+}
+
+// ---------- Brifing ----------
+async function composeBriefing() {
+  const m = memory.get();
+  const d = new Date();
+  const h = d.getHours();
+  const part = h < 5 ? "Xayrli tun" : h < 12 ? "Xayrli tong" : h < 18 ? "Xayrli kun" : "Xayrli kech";
+  const out = [`${part}${m.name ? ", " + m.name : ""}.`, `Hozir soat ${fmtTime(d)}, ${fmtDate(d)}.`];
+  try {
+    const w = await withTimeout(fetchWeather(currentCity()), 6000);
+    out.push(`${titleCase(currentCity())}: ${deg(w.temp)}, ${w.description}.`);
+  } catch { /* ob-havosiz ham brifing beramiz */ }
+  const p = pendingTasks();
+  out.push(p.length ? `Sizda ${p.length} ta vazifa bor${p.length <= 3 ? ": " + p.map((x) => x.task).join(", ") : ""}.` : "Bugunga vazifalar yo'q.");
+  if (timers.length) out.push(`${timers.length} ta taymer ishlayapti.`);
+  return out.join(" ");
+}
+
 // ---------- Buyruqlar (AI'siz bajariladi) ----------
 function norm(t) {
   return t.toLowerCase().replace(/[’ʻʼ`´]/g, "'").replace(/\s+/g, " ").trim();
 }
 function pendingTasks() { return store.get(TASKS_KEY, []).filter((t) => !t.done); }
+function addTask(task) {
+  const tasks = store.get(TASKS_KEY, []);
+  tasks.push({ task: String(task).trim().slice(0, 200), time: nowHM(), done: false });
+  store.set(TASKS_KEY, tasks);
+  renderTasks();
+}
+const HELP_TEXT = "Men suhbat, ob-havo, vaqt, hisob-kitob, taymer, vazifalar va media bilan yordam beraman. Masalan: «5 daqiqaga taymer», «Samarqandda ob-havo qanday», «brifing», «12 ko'paytirish 12» yoki «eslab qol: ...».";
 
+/** Mahalliy buyruq. null — AI'ga yuboriladi. Natija: {reply, open?, label?} | {run: async () => {...}} | {stop: true}. */
 function parseIntent(raw) {
   const t = norm(raw);
+  const tc = raw.replace(/[’ʻʼ`´]/g, "'").replace(/\s+/g, " ").trim();
   let m;
+
+  if (/^(to'xta\w*|toxta\w*|jim|yetarli|bas|stop)\W*$/.test(t)) return { stop: true };
+
+  // vazifalar
+  if ((m = tc.match(/^(?:vazifa|reja|eslatma)\s*(?:qo'?sh|qosh|yoz|qo'shing)\W*(.+)$/i))) {
+    addTask(m[1]);
+    return { reply: `Vazifa qo'shildi: ${m[1].trim()}.` };
+  }
+
+  // taymerlar
+  const timerWord = /\b(taymer\w*|timer\w*|budilnik\w*)/.test(t);
+  if (timerWord && /(to'xtat|toxtat|bekor|o'chir|ochir|tozala)/.test(t)) {
+    const n = timers.length;
+    timers = [];
+    saveTimers();
+    renderTimers();
+    sfx.stopAlarm();
+    return { reply: n ? `Taymerlar bekor qilindi (${n} ta).` : "Faol taymer yo'q edi." };
+  }
+  if ((timerWord && /(qancha|qoldi|holat|ro'yxat|qaysi|bormi|nechta)/.test(t)) || /^taymerlar\w*\W*$/.test(t)) {
+    return { reply: timers.length ? `Faol taymerlar: ${timersSummary()}.` : "Faol taymer yo'q." };
+  }
+  const dur = parseDuration(t);
+  if (dur && (timerWord || /\b(eslat\w*|uyg'ot\w*|signal)\b/.test(t))) {
+    if (!addTimer(dur.seconds, dur.label)) return { reply: "Taymerlar soni chegaraga yetdi. Avval ba'zilarini bekor qiling." };
+    return { reply: `${speakDuration(dur.seconds)}ga taymer o'rnatildi${dur.label !== "Taymer" ? ": " + dur.label : ""}.` };
+  }
+  if (timerWord) return { reply: "Qancha vaqtga? Masalan: «5 daqiqaga taymer»." };
+
+  // brifing, diagnostika
+  if (/^(?:brifing|briefing|kunlik brifing|bugungi brifing|kunlik hisobot|hisobot ber\w*|kun rejasi)\W*$/.test(t)) {
+    return { run: async () => ({ reply: await composeBriefing() }) };
+  }
+  if (/(diagnostika|tizim holati|tizimni tekshir|hammasi joyidami)/.test(t)) {
+    return {
+      run: async () => {
+        await pingServer();
+        const g = (id) => $(id).textContent.toLowerCase();
+        return { reply: `Diagnostika: tarmoq ${g("st-net")}, server ${g("st-ping")}, mikrofon ${g("st-mic")}, sun'iy intellekt ${g("st-ai")}, ovoz ${g("st-tts")}.` };
+      },
+    };
+  }
+
+  // ob-havo va shahar
+  if ((m = t.match(/^(?:mening\s+)?shahrim(?:ni)?\s+(.+?)(?:\s+(?:qil\w*|deb\s.*|ekan))?$/)) || (m = t.match(/^men\s+([a-z'-]+?)(?:da|dan)\s+(?:yashayman|turaman)$/))) {
+    const words = m[1].split(" ");
+    const guess = words.find((w) => KNOWN_CITIES.some((c) => w.startsWith(c))) || words[0];
+    const city = KNOWN_CITIES.find((c) => guess.startsWith(c) && guess.length - c.length <= 5) || guess.replace(LOCATIVE, (x, _, off) => (off >= 4 ? "" : x));
+    return {
+      run: async () => {
+        await fetchWeather(titleCase(city)); // mavjudligini tekshiramiz; topilmasa xato matni qaytadi
+        store.set(CITY_KEY, titleCase(city));
+        refreshWeather();
+        return { reply: `Shahringiz: ${titleCase(city)}. Ob-havo shu shahar bo'yicha ko'rsatiladi.` };
+      },
+    };
+  }
+  if (/(ob[\s-]?havo|havo\s+(?:qanday|qanaqa|issiq|sovuq|harorati)|tashqarida\s+(?:havo|harorat)|harorat\s+(?:necha|qancha|qanday))/.test(t)) {
+    const city = titleCase(cityFromWords(t) || currentCity());
+    return { run: async () => ({ reply: weatherSentence(await fetchWeather(city), city) }) };
+  }
+
+  // xotira
+  if ((m = t.match(/^(?:mening\s+)?ismim\s+(?:bu\s+)?([a-z']+(?:\s[a-z']+)?)$/)) || (m = t.match(/^meni\s+([a-z']+(?:\s[a-z']+)?)\s+deb\s+(?:chaqir|ayt)\w*$/))) {
+    const mem = memory.get();
+    mem.name = titleCase(m[1]);
+    memory.save(mem);
+    return { reply: `Xush kelibsiz, ${mem.name}. Ismingizni eslab qoldim.` };
+  }
+  if ((m = tc.match(/^(?:eslab\s+qol\w*|yodda\s+tut\w*|yodingda\s+tut\w*)\W*(.+)$/i))) {
+    const mem = memory.get();
+    mem.facts.push(m[1].trim().slice(0, 200));
+    mem.facts = mem.facts.slice(-MAX_FACTS);
+    memory.save(mem);
+    return { reply: `Eslab qoldim: ${m[1].trim()}.` };
+  }
+  if (/(nimalarni?\s+eslab|nimani\s+eslab|meni\s+taniysan|nimalar\s+bilasan|xotira\w*\s+(?:ko'rsat|ro'yxat))/.test(t)) {
+    const mem = memory.get();
+    const bits = [mem.name ? `ismingiz ${mem.name}` : "", ...mem.facts].filter(Boolean);
+    return { reply: bits.length ? `Men bilaman: ${bits.join("; ")}.` : "Hali hech narsani eslab qolmaganman. «Eslab qol: ...» deb ayting." };
+  }
+  if (/(xotira\w*\s+(?:tozala|o'chir)|hammasini\s+unut|meni\s+unut)/.test(t)) {
+    memory.save({ name: "", facts: [] });
+    store.set(CITY_KEY, DEFAULT_CITY);
+    refreshWeather();
+    return { reply: "Xotira tozalandi." };
+  }
+
+  // kalkulyator
+  if ((m = t.match(/^(?:hisobla\w*[:\s]*)?([\d\s+\-*/×÷%^().,x]+?)\s*(?:necha|nechchi|nechaga teng|=|\?)*$/)) && /[\d)]\s*[+\-*/×÷%^x]\s*[\d(.]/.test(m[1])) {
+    // «20-11-2026» kabi sanalar faqat «hisobla» yoki «necha» bilan hisoblanadi
+    const asked = /^hisobla/.test(t) || /(necha|nechchi|=|\?)$/.test(t) || /[\d)]\s*[+*/×÷%^x]\s*[\d(.]/.test(m[1]);
+    const res = asked ? calc(m[1].replace(/(\d)\s*x\s*(\d)/g, "$1*$2")) : null;
+    if (res !== null) return { reply: `${m[1].trim()} = ${res}` };
+  }
+  if ((m = t.match(/^(\d+(?:[.,]\d+)?)\s*ga\s*(\d+(?:[.,]\d+)?)\s*(?:ni\s*)?qo'sh\w*\W*$/))) {
+    const res = calc(`${m[1]}+${m[2]}`);
+    if (res !== null) return { reply: `${m[1]} + ${m[2]} = ${res}` };
+  }
+  if ((m = t.match(/^(\d+(?:[.,]\d+)?)\s*dan\s*(\d+(?:[.,]\d+)?)\s*(?:ni\s*)?ayir\w*\W*$/))) {
+    const res = calc(`${m[1]}-${m[2]}`);
+    if (res !== null) return { reply: `${m[1]} - ${m[2]} = ${res}` };
+  }
+  if ((m = t.match(/^(\d+(?:[.,]\d+)?)\s*(?:ni|ga)?\s*(qo'shuv|qo'sh|ayir|ko'paytir|bo'l)\w*\s+(\d+(?:[.,]\d+)?)\s*(?:ni|ga|ta|ta\w*)?\W*$/))) {
+    const op = { "qo'shuv": "+", "qo'sh": "+", "ayir": "-", "ko'paytir": "*", "bo'l": "/" }[m[2]];
+    const res = calc(`${m[1]}${op}${m[3]}`);
+    if (res !== null) return { reply: `${m[1]} ${op} ${m[3]} = ${res}` };
+  }
+
+  // vaqt, sana
   if (/(soat|vaqt)\b.*\b(necha|nechchi|qancha|nechta)/.test(t) || /^soat nechchi/.test(t)) {
     return { reply: `Hozir soat ${fmtTime(new Date())}.` };
   }
   if (/(bugun|sana|kun)\b.*\b(qaysi|nima|necha|nechi)/.test(t)) {
     return { reply: `Bugun ${fmtDate(new Date(), true)}.` };
-  }
-  if ((m = t.match(/^(?:vazifa|reja|eslatma)\s*(?:qo'?sh|qosh|yoz|qo'shing)\W*(.+)$/))) {
-    const task = m[1].trim();
-    const tasks = store.get(TASKS_KEY, []);
-    tasks.push({ task, time: nowHM(), done: false });
-    store.set(TASKS_KEY, tasks);
-    renderTasks();
-    return { reply: `Vazifa qo'shildi: ${task}.` };
   }
   if (/(vazifalar|rejalar|rejam|vazifalarim)/.test(t)) {
     const p = pendingTasks();
@@ -286,32 +645,62 @@ function parseIntent(raw) {
     renderLogEmpty();
     return { reply: "Suhbat tozalandi." };
   }
+
+  // media
   if ((m = t.match(/(?:youtube|yutub|yutyub)\w*\s+(.+)/))) {
     return { reply: `YouTube'da «${m[1]}» qidiruvi tayyor.`, open: `https://www.youtube.com/results?search_query=${encodeURIComponent(m[1])}`, label: "YouTube'da ochish" };
   }
   if ((m = t.match(/^(?:musiqa|qo'shiq|spotify)\w*\s*(?:qo'?y\w*|top|och)?\s+(.+)/))) {
     return { reply: `Spotify'da «${m[1]}» qidiruvi tayyor.`, open: `https://open.spotify.com/search/${encodeURIComponent(m[1])}`, label: "Spotify'da ochish" };
   }
+
+  // suhbat
   if (/^(rahmat|raxmat|tashakkur)/.test(t)) return { reply: "Arzimaydi." };
-  if (/^(salom|assalomu alaykum|hayrli)/.test(t) && t.split(" ").length <= 3) return { reply: "Salom! Sizga qanday yordam bera olaman?" };
+  if (/^(salom|assalomu alaykum|hayrli)/.test(t) && t.split(" ").length <= 3) {
+    const n = memory.get().name;
+    return { reply: `Salom${n ? ", " + n : ""}! Sizga qanday yordam bera olaman?` };
+  }
+  if (/^(?:qalaysan|qalaysiz|ahvol\w*|ishlar qalay|nima gap)\W*$/.test(t)) return { reply: "Barcha tizimlar me'yorida. Sizga qanday yordam bera olaman?" };
+  if (/(sen kimsan|o'zing haqingda|isming nima)/.test(t)) return { reply: "Men ADOLF — sizning shaxsiy sun'iy intellekt yordamchingizman. Gapiring yoki yozing, bajaraman." };
+  if (/^(?:yordam|help|nima qila olasan|nimalar qila olasan|buyruqlar)\W*$/.test(t)) return { reply: HELP_TEXT };
   return null;
 }
 function nowHM() { return fmtTime(new Date()); }
+
+/** Server qaytargan amallarni bajaradi (taymer, vazifa) va ochiladigan havolalarni qaytaradi. */
+function applyActions(actions) {
+  const links = [];
+  for (const a of Array.isArray(actions) ? actions : []) {
+    if (!a || typeof a !== "object") continue;
+    if (a.type === "timer" && Number.isFinite(a.seconds)) addTimer(Math.max(1, Math.min(a.seconds, 86400)), a.label);
+    else if (a.type === "task" && typeof a.text === "string" && a.text.trim()) addTask(a.text);
+    else if (a.type === "open" && typeof a.url === "string" && SAFE_URL.test(a.url)) links.push({ url: a.url, label: typeof a.label === "string" ? a.label.slice(0, 60) : "Ochish" });
+  }
+  return links;
+}
 
 let lastWasVoice = false;
 async function handleInput(text, { voice = false } = {}) {
   text = text.trim();
   if (!text) return;
   lastWasVoice = voice;
+  sfx.stopAlarm();
   stopSpeaking();
   $("heard").textContent = "";
   addLog("user", text);
 
-  const intent = parseIntent(text);
+  let intent = null;
+  try { intent = parseIntent(text); } catch (e) { console.error(e); }
   if (intent) {
-    addLog("bot", intent.reply, intent.open ? { url: intent.open, label: intent.label } : null);
+    if (intent.stop) { resumeListening(); return; }
     if (intent.open && !voice) window.open(intent.open, "_blank", "noopener,noreferrer");
-    await speak(intent.reply);
+    if (intent.run) {
+      setState("thinking");
+      try { intent = await intent.run(); } catch (e) { intent = { reply: e.message || "Bajarib bo'lmadi.", failed: true }; }
+      setState("idle");
+    }
+    if (intent.failed) sfx.play("error");
+    await botSay(intent.reply, intent.open ? [{ url: intent.open, label: intent.label }] : null);
     resumeListening();
     return;
   }
@@ -322,11 +711,15 @@ async function handleInput(text, { voice = false } = {}) {
   const history = store.get(HISTORY_KEY, []);
   history.push({ role: "user", content: text });
   try {
-    const { reply } = await api("/api/chat", { messages: history.slice(-MAX_HISTORY) });
+    const res = await api("/api/chat", { messages: history.slice(-MAX_HISTORY), memory: memory.forServer(), tz: TZ });
+    const links = applyActions(res.actions);
+    const reply = res.reply || (res.actions && res.actions.length ? "Bajarildi." : "Tushunmadim, qayta ayting.");
     history.push({ role: "assistant", content: reply });
     store.set(HISTORY_KEY, history.slice(-MAX_HISTORY));
     pending.classList.remove("pending");
-    pending.querySelector(".txt").textContent = reply;
+    addLogLinks(pending, links);
+    typeLog(pending, reply);
+    sfx.play("done");
     setStatus("st-ai", "FAOL");
     setState("idle");
     await speak(reply);
@@ -335,6 +728,7 @@ async function handleInput(text, { voice = false } = {}) {
     pending.querySelector(".who").textContent = "TIZIM";
     pending.querySelector(".txt").textContent = e.message;
     setStatus("st-ai", "XATO", "bad");
+    sfx.play("error");
     setState("idle");
     await browserSpeak("Kechirasiz, hozir javob bera olmayapman.", ++speakToken);
   }
@@ -375,6 +769,7 @@ function startListening({ direct = false } = {}) {
   rec.interimResults = true;
   rec.continuous = wake;
   setState("listening");
+  if (direct) sfx.play("listen");
   setStatus("st-mic", "TINGLAYAPTI");
   let handled = false;
 
@@ -388,6 +783,7 @@ function startListening({ direct = false } = {}) {
       if (wake) {
         const m = text.match(WAKE);
         if (m) {
+          sfx.play("listen");
           const cmd = text.slice(m.index + m[0].length).replace(/^[\s,.:!?-]+/, "");
           if (cmd) { handled = true; finish(cmd); } else { awaitingCommand = true; $("heard").textContent = "Eshitaman…"; }
         } else if (awaitingCommand) {
@@ -439,6 +835,7 @@ function resumeListening() {
 }
 
 $("orb-btn").addEventListener("click", () => {
+  if (sfx.isRinging()) { sfx.stopAlarm(); return; }
   if (state === "speaking") { stopSpeaking(); return; }
   if (state === "listening") {
     if ($("opt-wake").checked) { $("opt-wake").checked = false; store.set("adolf_opt_wake", false); toast("«ADOLF» deb chaqirish o'chirildi."); }
@@ -456,16 +853,19 @@ $("opt-wake").addEventListener("change", (e) => {
 });
 $("opt-convo").addEventListener("change", (e) => store.set("adolf_opt_convo", e.target.checked));
 $("opt-voice").addEventListener("change", (e) => { store.set("adolf_opt_voice", e.target.checked); if (!e.target.checked) stopSpeaking(); });
+$("opt-sfx").addEventListener("change", (e) => { store.set("adolf_opt_sfx", e.target.checked); sfx.setEnabled(e.target.checked); if (e.target.checked) sfx.play("done"); });
+// Brauzer ovozni faqat foydalanuvchi harakatidan keyin ruxsat beradi
+["pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, () => sfx.unlock(), { once: true, passive: true }));
 
-// ---------- Salomlashish ----------
-function greet() {
+// ---------- Salomlashish (brifing) ----------
+async function greet() {
   if (session.flag("adolf_greeted")) return;
   session.setFlag("adolf_greeted");
-  const h = new Date().getHours();
-  const part = h < 5 ? "Xayrli tun" : h < 12 ? "Xayrli tong" : h < 18 ? "Xayrli kun" : "Xayrli kech";
-  const text = `${part}. ADOLF xizmatingizga tayyor.`;
-  addLog("bot", text);
-  speak(text);
+  setState("thinking");
+  let text;
+  try { text = await composeBriefing(); } catch { text = "ADOLF xizmatingizga tayyor."; }
+  setState("idle");
+  await botSay(text);
 }
 
 // ---------- Modullar (dialoglar) ----------
@@ -518,11 +918,8 @@ $("task-form").addEventListener("submit", (e) => {
   const input = $("task-input");
   const task = input.value.trim();
   if (!task) return;
-  const tasks = store.get(TASKS_KEY, []);
-  tasks.push({ task, time: nowHM(), done: false });
-  store.set(TASKS_KEY, tasks);
+  addTask(task);
   input.value = "";
-  renderTasks();
 });
 
 // Media
@@ -644,14 +1041,26 @@ $("analysis-run").addEventListener("click", async (e) => {
 // ---------- Boshlash ----------
 let appReady = false;
 function initApp() {
-  if (appReady) return;
-  appReady = true;
-  $("opt-voice").checked = store.get("adolf_opt_voice", true);
-  $("opt-convo").checked = store.get("adolf_opt_convo", false) && !!SR;
-  refreshNet();
-  setStatus("st-tts", "OPENAI OVOZI");
+  if (!appReady) {
+    appReady = true;
+    $("opt-voice").checked = store.get("adolf_opt_voice", true);
+    $("opt-convo").checked = store.get("adolf_opt_convo", false) && !!SR;
+    $("opt-sfx").checked = store.get("adolf_opt_sfx", true);
+    sfx.setEnabled($("opt-sfx").checked);
+    setStatus("st-tts", "OPENAI OVOZI");
+    refreshNet();
+    refreshConn();
+    if (navigator.connection) navigator.connection.addEventListener("change", refreshConn);
+    initBattery();
+    setInterval(() => { if (session.get() && !document.hidden) pingServer(); }, 30000);
+    setInterval(() => { if (session.get() && !document.hidden) refreshWeather(); }, WX_TTL + 5000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && session.get()) { tickTimers(); pingServer(); } });
+  }
   renderLogFromHistory();
   renderTasks();
+  renderTimers();
+  refreshWeather();
+  pingServer();
 }
 showView();
 if (session.get()) initApp();

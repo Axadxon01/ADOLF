@@ -153,6 +153,28 @@ dialog::backdrop { background: rgba(0, 6, 12, .75); }
 .preview { max-width: 100%; max-height: 280px; justify-self: start; border: 1px solid var(--cyan-dim); }
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--bg-2); color: var(--text); border: 1px solid var(--amber); padding: 10px 16px; max-width: calc(100% - 32px); z-index: 30; font-size: .9rem; }
 
+/* Ob-havo, taymerlar, signal */
+.wx { display: grid; gap: 6px; }
+.wx-main { display: flex; align-items: baseline; gap: 12px; }
+.wx-main b { font: 300 2.4rem/1 var(--mono); color: var(--text); text-shadow: 0 0 14px rgba(54, 230, 255, .5); }
+.wx-main span { color: var(--cyan); font-size: .9rem; }
+.wx-meta { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: .75rem var(--mono); }
+.wx-meta li { display: flex; justify-content: space-between; gap: 8px; }
+.wx-meta span { color: var(--muted); letter-spacing: .06em; }
+.wx-meta b { color: var(--text); font-weight: 600; }
+.wx.off .wx-main b { color: var(--muted); text-shadow: none; }
+.hud-timers { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
+.hud-timers li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-left: 2px solid var(--amber); background: rgba(255, 184, 77, .1); }
+.hud-timers .lbl { flex: 1; overflow-wrap: anywhere; }
+.hud-timers .left { font: 600 1rem var(--mono); color: var(--amber); letter-spacing: .06em; }
+.hud-timers .del { border: 0; background: transparent; color: var(--muted); cursor: pointer; min-width: 32px; min-height: 32px; font-size: 1rem; }
+.hud-timers .none { border-left-color: var(--cyan-faint); color: var(--muted); background: none; }
+.alarm { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; padding: 10px 16px; background: rgba(255, 184, 77, .16); border-bottom: 1px solid var(--amber); font: 700 .9rem var(--mono); letter-spacing: .1em; color: #ffe0b0; animation: flash 1s steps(2) infinite; }
+@keyframes flash { 50% { background: rgba(255, 184, 77, .3); } }
+.entry.typing .txt::after { content: "\258D"; color: var(--cyan); margin-left: 2px; animation: caret 1s steps(2) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.entry a + a { margin-left: 14px; }
+
 /* Moslashuvchan */
 @media (max-width: 1020px) {
   .grid { grid-template-columns: 1fr; }
@@ -169,4 +191,4 @@ dialog::backdrop { background: rgba(0, 6, 12, .75); }
   .cmd .btn { padding: 12px; }
   .panel.left .status { grid-template-columns: 1fr; }
 }
-@media (prefers-reduced-motion: reduce) { .entry { animation: none; } .boot { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .entry, .alarm, .entry.typing .txt::after { animation: none; } .boot { transition: none; } }

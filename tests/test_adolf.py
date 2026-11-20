@@ -90,13 +90,14 @@ def test_server_flow(monkeypatch):
     from fastapi.testclient import TestClient
     import ai_core, server
     monkeypatch.setattr(ai_core, "complete", lambda m, max_tokens=600: "AI javobi")
+    monkeypatch.setattr(ai_core, "agent_chat", lambda msgs, memory=None, tz="": {"reply": "AI javobi", "actions": []})
     c = TestClient(server.app)
     assert c.get("/health").json()["login_configured"] is True
     assert c.post("/api/chat", json={"message": "salom"}).status_code == 401
     assert c.post("/api/login", json={"code": "noto'g'ri"}).status_code == 401
     token = c.post("/api/login", json={"code": "sir-kod-123"}).json()["token"]
     h = {"Authorization": f"Bearer {token}"}
-    assert c.post("/api/chat", json={"message": "salom"}, headers=h).json() == {"reply": "AI javobi", "response": "AI javobi"}
+    assert c.post("/api/chat", json={"message": "salom"}, headers=h).json() == {"reply": "AI javobi", "actions": [], "response": "AI javobi"}
     assert c.post("/api/chat", json={"message": ""}, headers=h).status_code == 422
     assert c.post("/api/chat", json={"message": "x" * 5000}, headers=h).status_code == 422
     assert c.post("/api/chat", json={"message": "a"}, headers={"Authorization": "Bearer yolgon"}).status_code == 401
@@ -130,6 +131,7 @@ def _client(monkeypatch):
     import ai_core, server
     server._hits.clear()
     monkeypatch.setattr(ai_core, "complete", lambda m, max_tokens=600: "AI javobi")
+    monkeypatch.setattr(ai_core, "agent_chat", lambda msgs, memory=None, tz="": {"reply": "AI javobi", "actions": []})
     c = TestClient(server.app)
     token = c.post("/api/login", json={"code": "sir-kod-123"}).json()["token"]
     return c, {"Authorization": f"Bearer {token}"}
@@ -146,7 +148,6 @@ def test_chat_with_messages_list(monkeypatch):
 
 
 def test_tools_endpoint(monkeypatch):
-    import ai_core
     c, h = _client(monkeypatch)
     assert c.post("/api/tools", json={"action": "translate", "text": "hi", "target": "uz"}, headers=h).json() == {"result": "AI javobi"}
     assert c.post("/api/tools", json={"action": "translate", "text": "hi", "target": "xx"}, headers=h).status_code == 400
@@ -179,9 +180,9 @@ def test_speak_returns_audio(monkeypatch):
 def test_ai_error_is_explained(monkeypatch):
     import ai_core, openai, httpx
     c, h = _client(monkeypatch)
-    def boom(m, max_tokens=600):
+    def boom(msgs, memory=None, tz=""):
         raise openai.RateLimitError("quota", response=httpx.Response(429, request=httpx.Request("POST", "http://x")), body=None)
-    monkeypatch.setattr(ai_core, "complete", boom)
+    monkeypatch.setattr(ai_core, "agent_chat", boom)
     r = c.post("/api/chat", json={"messages": [{"role": "user", "content": "a"}]}, headers=h)
     assert r.status_code == 502 and "balansi" in r.json()["detail"]
 
@@ -205,3 +206,114 @@ def test_static_ui_and_security_headers():
     assert c.get("/api/chat").status_code in (404, 405)
     assert c.get("/../server.py").status_code in (404, 400)
     assert "ai_core" not in c.get("/server.py").text  # manba kod ochiq emas
+
+
+# ---------- asboblar va agent rejimi ----------
+def test_calculator_safe():
+    import tools
+    assert tools.calculate("2+2*3") == "8"
+    assert tools.calculate("10/4") == "2.5"
+    assert tools.calculate("2^10") == "1024"
+    for bad in ("__import__('os').system('ls')", "9**9**9", "1/0", "abs(1)", "", "a+1"):
+        with pytest.raises(tools.ToolError):
+            tools.calculate(bad)
+
+
+def test_weather_parsing_and_cache(monkeypatch):
+    import tools
+    tools._cache.clear()
+    calls = []
+    def fake(url, params, timeout=8.0):
+        calls.append(url)
+        if "geocod" in url or "search" in url:
+            return {"results": [{"latitude": 39.65, "longitude": 66.96, "name": "Samarkand"}]}
+        return {"current": {"temperature_2m": 7.6, "apparent_temperature": 5.2, "relative_humidity_2m": 71, "weather_code": 2, "wind_speed_10m": 10.8, "is_day": 1}}
+    monkeypatch.setattr(tools, "_fetch_json", fake)
+    w = tools.get_weather("Samarqand")
+    assert w["city"] == "Samarkand" and w["temp"] == 8 and w["description"] == "qisman bulutli" and w["wind"] == 3.0
+    n = len(calls); tools.get_weather("Samarqand"); assert len(calls) == n  # keshdan
+    tools._cache.clear()
+    monkeypatch.setattr(tools, "_fetch_json", lambda *a, **k: {"results": []})
+    with pytest.raises(tools.ToolError):
+        tools.get_weather("Yo'qShahar")
+
+
+def test_weather_endpoint(monkeypatch):
+    import tools
+    c, h = _client(monkeypatch)
+    monkeypatch.setattr(tools, "get_weather", lambda city="": {"city": city or "Toshkent", "temp": 8})
+    assert c.get("/api/weather?city=Buxoro", headers=h).json()["city"] == "Buxoro"
+    assert c.get("/api/weather").status_code == 401
+    def boom(city=""): raise tools.ToolError("yo'q")
+    monkeypatch.setattr(tools, "get_weather", boom)
+    assert c.get("/api/weather", headers=h).status_code == 502
+
+
+class _Fn:
+    def __init__(self, name, args): self.name, self.arguments = name, args
+class _Call:
+    def __init__(self, id, name, args): self.id, self.function = id, _Fn(name, args)
+class _Msg:
+    def __init__(self, content=None, calls=None): self.content, self.tool_calls = content, calls
+class _Resp:
+    def __init__(self, msg): self.choices = [type("C", (), {"message": msg})()]
+class _FakeClient:
+    def __init__(self, script): self.script, self.seen = list(script), []; self.chat = type("X", (), {"completions": self})()
+    def create(self, **kw):
+        self.seen.append(kw); return _Resp(self.script.pop(0))
+
+
+def test_agent_tool_loop(monkeypatch):
+    import ai_core, json
+    fake = _FakeClient([
+        _Msg(calls=[_Call("1", "set_timer", json.dumps({"seconds": 300, "label": "choy"})),
+                    _Call("2", "calculate", json.dumps({"expression": "12*12"})),
+                    _Call("3", "add_task", json.dumps({"text": "non olish"})),
+                    _Call("4", "open_media", json.dumps({"platform": "youtube", "query": "Navoiy"}))]),
+        _Msg(content="Tayyor, janob."),
+    ])
+    monkeypatch.setattr(ai_core, "_client", lambda: fake)
+    out = ai_core.agent_chat([{"role": "user", "content": "5 daqiqaga taymer"}], memory=["Ismi Axad"], tz="Asia/Tashkent")
+    assert out["reply"] == "Tayyor, janob."
+    kinds = [a["type"] for a in out["actions"]]
+    assert kinds == ["timer", "task", "open"]
+    assert out["actions"][0] == {"type": "timer", "seconds": 300, "label": "choy"}
+    assert "youtube.com/results?search_query=Navoiy" in out["actions"][2]["url"]
+    second = fake.seen[1]["messages"]
+    tool_msgs = [m for m in second if m["role"] == "tool"]
+    assert json.loads(tool_msgs[1]["content"]) == {"result": "144"}
+    assert "Ismi Axad" in fake.seen[0]["messages"][0]["content"]
+
+
+def test_agent_bad_args_and_timer_bounds(monkeypatch):
+    import ai_core
+    fake = _FakeClient([
+        _Msg(calls=[_Call("1", "set_timer", "{buzuq json"), _Call("2", "set_timer", '{"seconds": 99999999}'), _Call("3", "nomalum", "{}")]),
+        _Msg(content="ok"),
+    ])
+    monkeypatch.setattr(ai_core, "_client", lambda: fake)
+    out = ai_core.agent_chat([{"role": "user", "content": "x"}])
+    assert out["reply"] == "ok"
+    assert [a["seconds"] for a in out["actions"]] == [1, 86400]  # buzuq JSON -> bo'sh argumentlar -> 1 soniya
+
+
+def test_agent_falls_back_when_tools_unsupported(monkeypatch):
+    import ai_core, openai, httpx
+    class Bad:
+        chat = type("X", (), {"completions": type("Y", (), {"create": staticmethod(lambda **kw: (_ for _ in ()).throw(openai.BadRequestError("no tools", response=httpx.Response(400, request=httpx.Request("POST", "http://x")), body=None)))})()})()
+    monkeypatch.setattr(ai_core, "_client", lambda: Bad())
+    monkeypatch.setattr(ai_core, "complete", lambda m, max_tokens=600: "oddiy javob")
+    assert ai_core.agent_chat([{"role": "user", "content": "x"}]) == {"reply": "oddiy javob", "actions": []}
+
+
+def test_chat_endpoint_passes_actions_and_memory(monkeypatch):
+    import ai_core
+    c, h = _client(monkeypatch)
+    seen = {}
+    def fake(msgs, memory=None, tz=""):
+        seen.update(memory=memory, tz=tz)
+        return {"reply": "bajarildi", "actions": [{"type": "timer", "seconds": 60, "label": "x"}]}
+    monkeypatch.setattr(ai_core, "agent_chat", fake)
+    r = c.post("/api/chat", json={"messages": [{"role": "user", "content": "a"}], "memory": ["Ismi Axad"], "tz": "Asia/Tashkent"}, headers=h).json()
+    assert r["actions"][0]["type"] == "timer" and seen == {"memory": ["Ismi Axad"], "tz": "Asia/Tashkent"}
+    assert c.post("/api/chat", json={"messages": [{"role": "user", "content": "a"}], "memory": ["x"] * 21}, headers=h).status_code == 422
